@@ -88,18 +88,6 @@ function alertLabel(days) {
   return { text: `${days}h lagi`, cls: "bg-[#f0fdf4] text-[#166534]" };
 }
 
-function getQtyValue(item) {
-  const parsed = Number.parseInt(String(item?.qty ?? "").replace(/[^\d-]/g, ""), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-}
-
-function getMonthIndex(dateString) {
-  if (!dateString) return null;
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.getMonth();
-}
-
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_STYLE = {
@@ -138,156 +126,6 @@ function AlertBadge({ days }) {
     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${info.cls}`}>
       {info.text}
     </span>
-  );
-}
-
-function EquipmentWorkbookPanel({ item }) {
-  const totalSegments = item.sudahService + item.belumService + item.memasukiService || 1;
-  const segments = [
-    { key: "memasuki", label: "Memasuki service", value: item.memasukiService, color: "#f59e0b" },
-    { key: "belum", label: "Belum service", value: item.belumService, color: "#f97316" },
-    { key: "sudah", label: "Sudah service", value: item.sudahService, color: "#4c76c9" },
-  ];
-  const maxMonthly = Math.max(1, ...item.monthlyCounts);
-
-  let cumulative = 0;
-  const donutSegments = segments
-    .filter((segment) => segment.value > 0)
-    .map((segment) => {
-      const dash = (segment.value / totalSegments) * 100;
-      const current = cumulative;
-      cumulative += dash;
-      return { ...segment, dash, offset: 25 - current };
-    });
-
-  return (
-    <Card className="overflow-hidden border-[#d6a300] bg-[#ffc20f] shadow-[0_14px_28px_rgba(173,114,0,0.18)]">
-      <CardContent className="p-2.5">
-        <div className="rounded-[16px] border border-[#9d7b00] bg-[#ffbf00]">
-          <div className="border-b border-[#9d7b00] px-3 py-1.5 text-center">
-            <h3 className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#3b2a00]">
-              {item.equipment}
-            </h3>
-          </div>
-
-          <div className="grid gap-2 border-b border-[#9d7b00] p-2 lg:grid-cols-[1.05fr_1.4fr]">
-            <div className="space-y-1">
-              {[
-                { label: "Sudah service", value: item.sudahService },
-                { label: "Belum service", value: item.belumService },
-                { label: "Memasuki service", value: item.memasukiService },
-              ].map((row) => (
-                <div
-                  key={row.label}
-                  className="grid grid-cols-[1.7fr_56px] items-center border border-[#9d7b00] bg-[#ffc928] text-[10px] font-semibold uppercase text-[#2e2200]"
-                >
-                  <span className="border-r border-[#9d7b00] px-2 py-1">{row.label}</span>
-                  <span className="px-2 py-1 text-center">{row.value}</span>
-                </div>
-              ))}
-
-              <div className="border border-[#9d7b00] bg-[#ffc928]">
-                <div className="border-b border-[#9d7b00] px-2 py-1 text-center text-[10px] font-bold uppercase text-[#2e2200]">
-                  Progress
-                </div>
-                <div className="grid grid-cols-2 text-[10px] font-semibold uppercase text-[#2e2200]">
-                  <div className="border-r border-[#9d7b00] px-2 py-1.5 text-center">
-                    Dijadwalkan
-                    <div className="mt-1 text-[12px] font-bold">{item.scheduled}</div>
-                  </div>
-                  <div className="px-2 py-1.5 text-center">
-                    Belum jadwal
-                    <div className="mt-1 text-[12px] font-bold">{item.unscheduled}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex min-h-[160px] flex-col justify-between border border-[#9d7b00] bg-[#ffc928] p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6a5200]">
-                    Equipment Overview
-                  </p>
-                  <p className="mt-1 text-[22px] font-bold leading-none text-[#2e2200]">
-                    {item.totalUnits}
-                  </p>
-                  <p className="mt-1 text-[11px] text-[#6a5200]">unit tercatat</p>
-                </div>
-                <div className="rounded-full border border-[#9d7b00] bg-white/25 px-2.5 py-1 text-[10px] font-bold uppercase text-[#2e2200]">
-                  {item.completion}%
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <div className="space-y-2 text-[10px] uppercase text-[#5d4700]">
-                  {segments.map((segment) => (
-                    <div key={segment.key} className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full border border-white/70"
-                        style={{ backgroundColor: segment.color }}
-                      />
-                      <span className="font-semibold">{segment.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="relative flex h-[112px] w-[112px] items-center justify-center">
-                  <svg viewBox="0 0 42 42" className="h-full w-full -rotate-90">
-                    <circle cx="21" cy="21" r="15.915" fill="none" stroke="#fff3c1" strokeWidth="5" />
-                    {donutSegments.length === 0 ? (
-                      <circle cx="21" cy="21" r="15.915" fill="none" stroke="#d1d5db" strokeWidth="5" />
-                    ) : (
-                      donutSegments.map((segment) => (
-                        <circle
-                          key={segment.key}
-                          cx="21"
-                          cy="21"
-                          r="15.915"
-                          fill="none"
-                          stroke={segment.color}
-                          strokeWidth="5"
-                          strokeDasharray={`${segment.dash} ${100 - segment.dash}`}
-                          strokeDashoffset={segment.offset}
-                        />
-                      ))
-                    )}
-                  </svg>
-                  <div className="absolute text-center">
-                    <p className="text-[10px] font-semibold uppercase text-[#6a5200]">On time</p>
-                    <p className="mt-1 text-[20px] font-bold leading-none text-[#2e2200]">
-                      {item.sudahService}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-3 py-3">
-            <div className="grid h-[132px] grid-cols-12 items-end gap-2 border border-[#9d7b00] bg-[#ffc928] px-2.5 pb-2 pt-4">
-              {item.monthlyCounts.map((count, index) => {
-                const height = count > 0 ? Math.max(10, (count / maxMonthly) * 88) : 4;
-                return (
-                  <div key={`${item.equipment}-${BULAN_OPTIONS[index]}`} className="flex h-full flex-col items-center justify-end">
-                    <span className="mb-1 text-[10px] font-semibold text-[#6a5200]">{count}</span>
-                    <div
-                      className="w-full rounded-t-[4px] bg-[#4c76c9]"
-                      style={{ height: `${height}px` }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-1 grid grid-cols-12 gap-2 px-2.5 text-center text-[9px] font-semibold uppercase tracking-[0.12em] text-[#5d4700]">
-              {BULAN_OPTIONS.map((month) => (
-                <span key={`${item.equipment}-${month}-label`}>{month}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -550,47 +388,6 @@ export default function LsaFfaPage() {
     return { total, sudah, expired, needAlert, perluPerbaikan, vessels };
   }, [data]);
 
-  // ── Equipment summary (per type) ──────────────────────────────────────────
-  const equipmentWorkbook = useMemo(() => {
-    return EQUIPMENT_TYPES.map((equipment) => {
-      const items = data.filter((d) => d.equipment === equipment);
-      const totalUnits = items.reduce((sum, item) => sum + getQtyValue(item), 0);
-      const sudahService = items
-        .filter((item) => item.status === "Sudah")
-        .reduce((sum, item) => sum + getQtyValue(item), 0);
-      const memasukiService = items
-        .filter((item) => item.alertDays !== null && item.alertDays >= 0 && item.alertDays <= 90)
-        .reduce((sum, item) => sum + getQtyValue(item), 0);
-      const overdueUnits = items
-        .filter((item) => item.alertDays !== null && item.alertDays < 0)
-        .reduce((sum, item) => sum + getQtyValue(item), 0);
-      const belumService = Math.max(totalUnits - sudahService, overdueUnits);
-      const scheduled = items.filter((item) => item.nextDate).length;
-      const unscheduled = Math.max(items.length - scheduled, 0);
-      const monthlyCounts = BULAN_OPTIONS.map((_, monthIndex) =>
-        items.reduce((sum, item) => {
-          const nextMonth = getMonthIndex(item.nextDate);
-          if (nextMonth === monthIndex) {
-            return sum + getQtyValue(item);
-          }
-          return sum;
-        }, 0)
-      );
-
-      return {
-        equipment,
-        totalUnits,
-        sudahService,
-        belumService,
-        memasukiService,
-        scheduled,
-        unscheduled,
-        monthlyCounts,
-        completion: totalUnits > 0 ? Math.round((sudahService / totalUnits) * 100) : 0,
-      };
-    });
-  }, [data]);
-
   // ── Filter ────────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return data.filter((d) => {
@@ -705,21 +502,6 @@ export default function LsaFfaPage() {
             </Card>
           );
         })}
-      </section>
-
-      {/* ── Equipment Summary per Type ── */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-[16px] font-semibold text-[#243041]">Section per Equipment</h2>
-          <p className="mt-1 text-[12px] text-[#7c8793]">
-            Tiap equipment sekarang punya section sendiri dengan komposisi seperti workbook client dan grafik balok bulanan per equipment.
-          </p>
-        </div>
-        <div className="space-y-4">
-          {equipmentWorkbook.map((item) => (
-            <EquipmentWorkbookPanel key={item.equipment} item={item} />
-          ))}
-        </div>
       </section>
 
       {/* ── Main Content: Table + Alert Panel ── */}
