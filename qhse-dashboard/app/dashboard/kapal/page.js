@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Anchor,
   ArrowUpRight,
@@ -15,112 +15,16 @@ import {
   FileText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  createKapal,
+  deleteKapal,
+  getKapalList,
+  updateKapal,
+} from "@/lib/services/kapalService";
+import { AREA_OPTIONS, TIPE_KAPAL_OPTIONS } from "@/constants/kapalOptions";
 
-const initialVessels = [
-  {
-    id: 1,
-    kodeKapal: "VSL-001",
-    namaKapal: "MV Adaro Pioneer",
-    tipeKapal: "Bulk Carrier",
-    ownerGroup: "Adaro Logistics",
-    areaOperasi: "Lower",
-    status: "Aktif",
-  },
-  {
-    id: 2,
-    kodeKapal: "VSL-002",
-    namaKapal: "MV Adaro Maritim",
-    tipeKapal: "Tug Boat",
-    ownerGroup: "Adaro Marine",
-    areaOperasi: "Upper",
-    status: "Aktif",
-  },
-  {
-    id: 3,
-    kodeKapal: "VSL-003",
-    namaKapal: "MV South Borneo",
-    tipeKapal: "Barge",
-    ownerGroup: "South Fleet Group",
-    areaOperasi: "Shore",
-    status: "Nonaktif",
-  },
-  {
-    id: 4,
-    kodeKapal: "VSL-004",
-    namaKapal: "MV Energi Nusantara",
-    tipeKapal: "Support Vessel",
-    ownerGroup: "Energi Offshore",
-    areaOperasi: "Upper",
-    status: "Aktif",
-  },
-  {
-    id: 5,
-    kodeKapal: "VSL-005",
-    namaKapal: "MV Borneo Service",
-    tipeKapal: "Landing Craft",
-    ownerGroup: "Borneo Marine",
-    areaOperasi: "Lower",
-    status: "Aktif",
-  },
-];
-
-const dokumenKapal = [
-  {
-    kapal: "MV Adaro Pioneer",
-    dokumen: "Sertifikat Keselamatan Peralatan",
-    jatuhTempo: "03 Mei 2026",
-    level: "Tinggi",
-    levelClass: "text-[#d14343]",
-  },
-  {
-    kapal: "MV Adaro Maritim",
-    dokumen: "Sertifikat Garis Muat",
-    jatuhTempo: "08 Mei 2026",
-    level: "Sedang",
-    levelClass: "text-[#d48806]",
-  },
-  {
-    kapal: "MV South Borneo",
-    dokumen: "Lisensi Radio",
-    jatuhTempo: "12 Mei 2026",
-    level: "Sedang",
-    levelClass: "text-[#d48806]",
-  },
-  {
-    kapal: "MV Energi Nusantara",
-    dokumen: "Sertifikat Kelas",
-    jatuhTempo: "19 Mei 2026",
-    level: "Rendah",
-    levelClass: "text-[#2b8a57]",
-  },
-];
-
-const rencanaPerawatan = [
-  {
-    pekerjaan: "Pemeriksaan Mesin Utama",
-    kapal: "MV Energi Nusantara",
-    jadwal: "27 Apr 2026",
-    progress: 72,
-  },
-  {
-    pekerjaan: "Pengujian Fire Pump",
-    kapal: "MV Adaro Pioneer",
-    jadwal: "29 Apr 2026",
-    progress: 48,
-  },
-  {
-    pekerjaan: "Survey Ketebalan Lambung",
-    kapal: "MV Adaro Maritim",
-    jadwal: "02 Mei 2026",
-    progress: 26,
-  },
-  {
-    pekerjaan: "Pemeriksaan Navigasi",
-    kapal: "MV Borneo Service",
-    jadwal: "05 Mei 2026",
-    progress: 84,
-  },
-];
+const dokumenKapal = [];
+const rencanaPerawatan = [];
 
 const emptyForm = {
   id: null,
@@ -129,7 +33,7 @@ const emptyForm = {
   tipeKapal: "",
   ownerGroup: "",
   areaOperasi: "",
-  status: "",
+  status: "Aktif",
 };
 
 function VesselStatCard({ title, value, note, icon: Icon, tone }) {
@@ -157,7 +61,20 @@ function statusBadgeClass(status) {
     : "bg-[#fff1f1] text-[#d84f4f]";
 }
 
-function VesselModal({ isOpen, form, onChange, onClose, onSubmit }) {
+function getAreaLabel(value) {
+  const normalizedValue = value?.toLowerCase();
+  return (
+    AREA_OPTIONS.find((option) => option.value === value)?.label ||
+    AREA_OPTIONS.find((option) => option.value === normalizedValue)?.label ||
+    value
+  );
+}
+
+function getTipeLabel(value) {
+  return TIPE_KAPAL_OPTIONS.find((option) => option.value === value)?.label || value;
+}
+
+function VesselModal({ isOpen, form, onChange, onClose, onSubmit, isSaving }) {
   if (!isOpen) {
     return null;
   }
@@ -215,13 +132,20 @@ function VesselModal({ isOpen, form, onChange, onClose, onSubmit }) {
 
             <label className="space-y-2">
               <span className="text-[13px] font-semibold text-[#304050]">Tipe Kapal</span>
-              <input
+              <select
                 name="tipeKapal"
                 value={form.tipeKapal}
                 onChange={onChange}
-                placeholder="Contoh: Tug Boat"
                 className="w-full rounded-[14px] border border-[#dbe3e8] bg-white px-4 py-3 text-[14px] text-[#243041] outline-none transition focus:border-[#118468] focus:ring-4 focus:ring-[#d5efe8]"
-              />
+                required
+              >
+                <option value="">Pilih tipe kapal</option>
+                {TIPE_KAPAL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="space-y-2">
@@ -242,11 +166,14 @@ function VesselModal({ isOpen, form, onChange, onClose, onSubmit }) {
                 value={form.areaOperasi}
                 onChange={onChange}
                 className="w-full rounded-[14px] border border-[#dbe3e8] bg-white px-4 py-3 text-[14px] text-[#243041] outline-none transition focus:border-[#118468] focus:ring-4 focus:ring-[#d5efe8]"
+                required
               >
                 <option value="">Pilih area operasi</option>
-                <option value="Lower">Lower</option>
-                <option value="Upper">Upper</option>
-                <option value="Shore">Shore</option>
+                {AREA_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
 
@@ -257,6 +184,7 @@ function VesselModal({ isOpen, form, onChange, onClose, onSubmit }) {
                 value={form.status}
                 onChange={onChange}
                 className="w-full rounded-[14px] border border-[#dbe3e8] bg-white px-4 py-3 text-[14px] text-[#243041] outline-none transition focus:border-[#118468] focus:ring-4 focus:ring-[#d5efe8]"
+                required
               >
                 <option value="">Pilih status</option>
                 <option value="Aktif">Aktif</option>
@@ -278,15 +206,17 @@ function VesselModal({ isOpen, form, onChange, onClose, onSubmit }) {
             <button
               type="button"
               onClick={onClose}
+              disabled={isSaving}
               className="inline-flex items-center justify-center rounded-[12px] border border-[#d7e0e6] px-4 py-3 text-[13px] font-semibold text-[#51606d] transition hover:bg-[#f6f8fa]"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="inline-flex items-center justify-center rounded-[12px] bg-[#118468] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#0e7259]"
+              disabled={isSaving}
+              className="inline-flex items-center justify-center rounded-[12px] bg-[#118468] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#0e7259] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {form.id ? "Update Kapal" : "Simpan Kapal"}
+              {isSaving ? "Menyimpan..." : form.id ? "Update Kapal" : "Simpan Kapal"}
             </button>
           </div>
         </form>
@@ -296,16 +226,48 @@ function VesselModal({ isOpen, form, onChange, onClose, onSubmit }) {
 }
 
 export default function VesselPage() {
-  const [vessels, setVessels] = useState(initialVessels);
+  const [vessels, setVessels] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const totalKapal = vessels.length;
   const kapalAktif = vessels.filter((item) => item.status === "Aktif").length;
   const kapalNonaktif = totalKapal - kapalAktif;
-  const areaUpper = vessels.filter((item) => item.areaOperasi === "Upper").length;
-  const areaLower = vessels.filter((item) => item.areaOperasi === "Lower").length;
-  const areaShore = vessels.filter((item) => item.areaOperasi === "Shore").length;
+  const areaUpper = vessels.filter((item) => item.areaOperasi?.toLowerCase() === "upper").length;
+  const areaLower = vessels.filter((item) => item.areaOperasi?.toLowerCase() === "lower").length;
+  const areaShore = vessels.filter((item) => item.areaOperasi?.toLowerCase() === "shore").length;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadKapal() {
+      try {
+        setIsLoading(true);
+        setErrorMessage("");
+        const data = await getKapalList();
+        if (isMounted) {
+          setVessels(data);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setErrorMessage(error.message || "Gagal memuat data kapal.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadKapal();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const vesselStats = [
     {
@@ -356,41 +318,30 @@ export default function VesselPage() {
     }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setIsSaving(true);
+    setErrorMessage("");
 
-    if (form.id) {
-      setVessels((current) =>
-        current.map((item) =>
-          item.id === form.id
-            ? {
-                ...item,
-                kodeKapal: form.kodeKapal,
-                namaKapal: form.namaKapal,
-                tipeKapal: form.tipeKapal,
-                ownerGroup: form.ownerGroup,
-                areaOperasi: form.areaOperasi,
-                status: form.status,
-              }
-            : item
-        )
-      );
-    } else {
-      setVessels((current) => [
-        {
-          id: Date.now(),
-          kodeKapal: form.kodeKapal,
-          namaKapal: form.namaKapal,
-          tipeKapal: form.tipeKapal,
-          ownerGroup: form.ownerGroup,
-          areaOperasi: form.areaOperasi,
-          status: form.status,
-        },
-        ...current,
-      ]);
+    try {
+      if (form.id) {
+        const updatedKapal = await updateKapal(form.id, form);
+        setVessels((current) =>
+          current.map((item) =>
+            item.id === form.id ? updatedKapal : item
+          )
+        );
+      } else {
+        const newKapal = await createKapal(form);
+        setVessels((current) => [newKapal, ...current]);
+      }
+
+      handleCloseModal();
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menyimpan data kapal.");
+    } finally {
+      setIsSaving(false);
     }
-
-    handleCloseModal();
   };
 
   const handleEdit = (vessel) => {
@@ -406,8 +357,19 @@ export default function VesselPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (vesselId) => {
-    setVessels((current) => current.filter((item) => item.id !== vesselId));
+  const handleDelete = async (vesselId) => {
+    const isConfirmed = window.confirm("Hapus data kapal ini?");
+    if (!isConfirmed) {
+      return;
+    }
+
+    try {
+      setErrorMessage("");
+      await deleteKapal(vesselId);
+      setVessels((current) => current.filter((item) => item.id !== vesselId));
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menghapus data kapal.");
+    }
   };
 
   return (
@@ -478,6 +440,12 @@ export default function VesselPage() {
             <VesselStatCard key={item.title} {...item} />
           ))}
         </section>
+
+        {errorMessage ? (
+          <div className="rounded-[16px] border border-[#ffd7d7] bg-[#fff7f7] px-4 py-3 text-[13px] font-medium text-[#b42318]">
+            {errorMessage}
+          </div>
+        ) : null}
 
         <section className="grid gap-4 xl:grid-cols-3">
           <Card className="min-w-0">
@@ -609,7 +577,20 @@ export default function VesselPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {vessels.map((vessel) => (
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-8 text-center text-[12px] text-[#7a8692]">
+                          Memuat data kapal...
+                        </td>
+                      </tr>
+                    ) : vessels.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-8 text-center text-[12px] text-[#7a8692]">
+                          Belum ada data kapal.
+                        </td>
+                      </tr>
+                    ) : (
+                      vessels.map((vessel) => (
                       <tr
                         key={vessel.id}
                         className="border-b border-[#f0f3f5] transition-colors hover:bg-[#fafbfc]"
@@ -620,17 +601,17 @@ export default function VesselPage() {
                         <td className="px-3 py-3">
                           <p className="text-[12px] font-semibold text-[#243041]">{vessel.namaKapal}</p>
                           <p className="mt-0.5 text-[10px] text-[#8b96a1]">
-                            {vessel.areaOperasi ? `Area ${vessel.areaOperasi}` : "Area belum diisi"}
+                            {vessel.areaOperasi ? `Area ${getAreaLabel(vessel.areaOperasi)}` : "Area belum diisi"}
                           </p>
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
-                          {vessel.tipeKapal || "-"}
+                          {getTipeLabel(vessel.tipeKapal) || "-"}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
                           {vessel.ownerGroup || "-"}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
-                          {vessel.areaOperasi || "-"}
+                          {getAreaLabel(vessel.areaOperasi) || "-"}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3">
                           <span
@@ -658,7 +639,8 @@ export default function VesselPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -673,6 +655,7 @@ export default function VesselPage() {
         onChange={handleChangeForm}
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
+        isSaving={isSaving}
       />
     </>
   );

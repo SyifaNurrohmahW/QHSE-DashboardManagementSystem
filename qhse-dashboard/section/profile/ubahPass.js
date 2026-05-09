@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
 import Swal from "sweetalert2";
+import { updateCurrentUserPassword } from "@/lib/services/authService";
 
 function UbahPasswordForm({ onSuccess, isGoogleAccount = false }) {
   const [passwordForm, setPasswordForm] = useState({
@@ -10,6 +11,7 @@ function UbahPasswordForm({ onSuccess, isGoogleAccount = false }) {
     newPassword: "",
     confirmPassword: "",
   });
+  const [loading, setLoading] = useState(false);
 
   const inputClass =
     "w-full rounded-[14px] border border-[#dfe5ea] bg-white px-4 py-3 text-sm text-[#273240] outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
@@ -29,40 +31,44 @@ function UbahPasswordForm({ onSuccess, isGoogleAccount = false }) {
       return Swal.fire("Oops!", "Password baru minimal 8 karakter", "warning");
     }
 
+    if (passwordForm.oldPassword === passwordForm.newPassword) {
+      return Swal.fire(
+        "Oops!",
+        "Password baru harus berbeda dari password lama",
+        "warning",
+      );
+    }
+
+    setLoading(true);
+
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/ubah-password", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          passwordLama: passwordForm.oldPassword,
-          passwordBaru: passwordForm.newPassword,
-          konfirmasiPassword: passwordForm.confirmPassword,
-        }),
+      await updateCurrentUserPassword(
+        passwordForm.oldPassword,
+        passwordForm.newPassword,
+      );
+
+      await Swal.fire({
+        title: "Berhasil!",
+        text: "Password berhasil diubah.",
+        icon: "success",
+        confirmButtonColor: "#059669",
       });
 
-      const data = await res.json();
-
-      if (res.ok) {
-        Swal.fire(
-          "Berhasil!",
-          data.message || "Password berhasil diubah",
-          "success",
-        );
-        onSuccess?.();
-        localStorage.removeItem("token");
-
-        setTimeout(() => {
-          window.location.href = "/login";
-        }, 1500);
-      } else {
-        Swal.fire("Gagal", data.message || "Gagal mengubah password", "error");
-      }
-    } catch {
-      Swal.fire("Error", "Terjadi kesalahan pada server", "error");
+      setPasswordForm({
+        oldPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      onSuccess?.();
+    } catch (error) {
+      Swal.fire({
+        title: "Gagal",
+        text: error.message || "Gagal mengubah password.",
+        icon: "error",
+        confirmButtonColor: "#059669",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,10 +162,11 @@ function UbahPasswordForm({ onSuccess, isGoogleAccount = false }) {
         <div className="pt-2">
           <button
             type="submit"
-            className="inline-flex items-center justify-center gap-2 rounded-[14px] bg-emerald-600 px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-emerald-700"
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-[14px] bg-emerald-600 px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
           >
             <KeyRound size={15} />
-            Ubah Password
+            {loading ? "Memproses..." : "Ubah Password"}
           </button>
         </div>
       </form>

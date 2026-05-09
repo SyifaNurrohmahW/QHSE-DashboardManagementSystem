@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import * as XLSX from "xlsx";
 import {
   AlertTriangle,
@@ -21,7 +21,6 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -107,10 +106,48 @@ function statusClass(status) {
   return "bg-emerald-50 text-emerald-700";
 }
 
+function ChartContainer({ height, children, className = "" }) {
+  const frameRef = useRef(null);
+  const [frameWidth, setFrameWidth] = useState(0);
+
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node) return;
+
+    const updateWidth = () => {
+      const nextWidth = Math.floor(node.getBoundingClientRect().width);
+      setFrameWidth(nextWidth > 0 ? nextWidth : 0);
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(() => {
+      updateWidth();
+    });
+
+    observer.observe(node);
+    window.addEventListener("resize", updateWidth);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={frameRef}
+      className={`relative w-full min-w-0 overflow-hidden ${className}`}
+      style={{ height: `${height}px`, minHeight: `${height}px` }}
+    >
+      {frameWidth > 0 ? children(frameWidth, height) : null}
+    </div>
+  );
+}
+
 export default function MonthlyReportPage() {
   const [selectedYear, setSelectedYear] = useState("2026");
   const [selectedMonth, setSelectedMonth] = useState("All");
-  const chartsReady = typeof window !== "undefined";
 
   const filteredMonthly = useMemo(() => {
     if (selectedMonth === "All") return monthlyData;
@@ -307,21 +344,19 @@ export default function MonthlyReportPage() {
               <BarChart3 size={18} className="text-emerald-600" />
             </div>
 
-            <div className="h-[320px] min-h-[320px] w-full min-w-0">
-              {chartsReady ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={filteredMonthly}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="hazard" name="Hazard Report" fill="#10b981" radius={[6, 6, 0, 0]} />
-                    <Bar dataKey="stfVir" name="STF & VIR" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                    <Bar dataKey="security" name="Security" fill="#f59e0b" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : null}
-            </div>
+            <ChartContainer height={320}>
+              {(width, height) => (
+              <BarChart width={width} height={height} data={filteredMonthly}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="hazard" name="Hazard Report" fill="#10b981" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="stfVir" name="STF & VIR" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="security" name="Security" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+              </BarChart>
+              )}
+            </ChartContainer>
           </CardContent>
         </Card>
 
@@ -334,27 +369,25 @@ export default function MonthlyReportPage() {
               Mengikuti summary NCR di Master Data.
             </p>
 
-            <div className="mt-4 h-[250px] min-h-[250px] w-full min-w-0">
-              {chartsReady ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={ncrStatus}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={55}
-                      outerRadius={90}
-                      paddingAngle={3}
-                    >
-                      {ncrStatus.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : null}
-            </div>
+            <ChartContainer height={250} className="mt-4">
+              {(width, height) => (
+              <PieChart width={width} height={height}>
+                <Pie
+                  data={ncrStatus}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={3}
+                >
+                  {ncrStatus.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+              )}
+            </ChartContainer>
 
             <div className="mt-3 space-y-2">
               {ncrStatus.map((item) => (
@@ -384,19 +417,17 @@ export default function MonthlyReportPage() {
               FAI, MTI, LTI, Grounded, Collision, Machinery, Nearmiss, Other.
             </p>
 
-            <div className="mt-4 h-[280px] min-h-[280px] w-full min-w-0">
-              {chartsReady ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={injuryCategory}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#10b981" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : null}
-            </div>
+            <ChartContainer height={280} className="mt-4">
+              {(width, height) => (
+              <BarChart width={width} height={height} data={injuryCategory}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#10b981" radius={[6, 6, 0, 0]} />
+              </BarChart>
+              )}
+            </ChartContainer>
           </CardContent>
         </Card>
 
@@ -409,26 +440,24 @@ export default function MonthlyReportPage() {
               Total exposure hours dari sheet Manhours.
             </p>
 
-            <div className="mt-4 h-[280px] min-h-[280px] w-full min-w-0">
-              {chartsReady ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={filteredMonthly}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(value) => formatNumber(value)} />
-                    <Line
-                      type="monotone"
-                      dataKey="manhours"
-                      name="Manhours"
-                      stroke="#10b981"
-                      strokeWidth={3}
-                      dot={{ r: 3 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : null}
-            </div>
+            <ChartContainer height={280} className="mt-4">
+              {(width, height) => (
+              <LineChart width={width} height={height} data={filteredMonthly}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(value) => formatNumber(value)} />
+                <Line
+                  type="monotone"
+                  dataKey="manhours"
+                  name="Manhours"
+                  stroke="#10b981"
+                  strokeWidth={3}
+                  dot={{ r: 3 }}
+                />
+              </LineChart>
+              )}
+            </ChartContainer>
           </CardContent>
         </Card>
       </section>

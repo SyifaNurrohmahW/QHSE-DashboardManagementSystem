@@ -71,7 +71,11 @@ export default function PengaturanPage() {
         <div className="space-y-6">
           <DetailInformasi profile={profile} />
           <UbahPasswordForm
-            onSuccess={() => {}}
+            onSuccess={() =>
+              handleProfileSave({
+                password_updated_at: new Date().toISOString(),
+              })
+            }
             isGoogleAccount={Boolean(profile?.is_google_account)}
           />
         </div>

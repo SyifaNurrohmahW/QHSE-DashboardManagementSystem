@@ -32,29 +32,28 @@ const VESSELS = [
 ];
 
 const DEPARTMENTS = [
-  "Marine Operation",
-  "Deck Crew",
-  "Engine Team",
+  "OPS",
+  "Technical",
+  "Cruing",
   "QHSE",
-  "Port Operation",
 ];
 
-const SOURCES = ["Internal Audit", "Client Finding", "Inspection", "Incident Investigation"];
-const FINDING_TYPES = ["Document", "Operational", "Equipment", "Competency", "Housekeeping"];
+const SOURCES = ["Internal Audit","External Audit", "Client Finding", "Inspection", "Incident Investigation"];
+const FINDING_TYPES = ["Technical", "Deviasi From Sms", "Operational", "Equipment", "Competency", "Housekeeping"];
 const SEVERITIES = ["Minor", "Major", "Critical"];
-const STATUSES = ["Open", "In Review", "Action Ongoing", "Verified", "Closed"];
+const STATUSES = ["Sec A", "Sec B", "Sec C"];
 
 const INITIAL_NCRS = [
   {
     id: "NCR-2026-013",
     title: "Checklist pre-departure belum ditandatangani lengkap",
     vessel: "MV Adaro Pioneer",
-    department: "Marine Operation",
+    department: "OPS",
     area: "Bridge",
     source: "Internal Audit",
     findingType: "Document",
     severity: "Major",
-    status: "In Review",
+    status: "Sec B",
     owner: "Chief Officer",
     issuedDate: "2026-04-24",
     targetDate: "2026-05-01",
@@ -70,7 +69,7 @@ const INITIAL_NCRS = [
     source: "Inspection",
     findingType: "Equipment",
     severity: "Critical",
-    status: "Action Ongoing",
+    status: "Sec C",
     owner: "2nd Engineer",
     issuedDate: "2026-04-22",
     targetDate: "2026-04-30",
@@ -86,7 +85,7 @@ const INITIAL_NCRS = [
     source: "Client Finding",
     findingType: "Operational",
     severity: "Major",
-    status: "Open",
+    status: "Sec A",
     owner: "Deck Foreman",
     issuedDate: "2026-04-21",
     targetDate: "2026-04-29",
@@ -102,7 +101,7 @@ const INITIAL_NCRS = [
     source: "Incident Investigation",
     findingType: "Housekeeping",
     severity: "Minor",
-    status: "Verified",
+    status: "Sec A",
     owner: "Safety Officer",
     issuedDate: "2026-04-18",
     targetDate: "2026-04-25",
@@ -136,12 +135,11 @@ const RECENT_ACTIVITY = [
 ];
 
 const STATUS_STYLES = {
-  Open: "bg-[#fff4e5] text-[#b26a00]",
-  "In Review": "bg-[#eef4ff] text-[#2f63ce]",
-  "Action Ongoing": "bg-[#fff0f0] text-[#c64c4c]",
-  Verified: "bg-[#edf9f1] text-[#1f9b58]",
-  Closed: "bg-[#eef2f5] text-[#55616d]",
+  "Sec A": "bg-[#fff4e5] text-[#b26a00]",
+  "Sec B": "bg-[#eef4ff] text-[#2f63ce]",
+  "Sec C": "bg-[#fff0f0] text-[#c64c4c]",
 };
+
 
 const SEVERITY_STYLES = {
   Minor: "bg-[#f4f5f7] text-[#55616d]",
@@ -194,11 +192,9 @@ function generateId(items) {
 
 function statusProgress(status) {
   const order = {
-    Open: 20,
-    "In Review": 40,
-    "Action Ongoing": 65,
-    Verified: 85,
-    Closed: 100,
+    "Sec A": 20,
+    "Sec B": 40,
+    "Sec C": 65,
   };
   return order[status] || 0;
 }
@@ -413,14 +409,14 @@ function NcrModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
             </select>
           </FormField>
 
-          <FormField label="Owner / PIC" required error={errors.owner}>
+          {/* <FormField label="Owner / PIC" required error={errors.owner}>
             <input
               className={inputClass("owner")}
               value={form.owner}
               onChange={updateField("owner")}
               placeholder="Nama PIC atau jabatan"
             />
-          </FormField>
+          </FormField> */}
 
           <FormField label="Issued Date" required error={errors.issuedDate}>
             <input type="date" className={inputClass("issuedDate")} value={form.issuedDate} onChange={updateField("issuedDate")} />
@@ -431,7 +427,7 @@ function NcrModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
           </FormField>
 
           <div className="md:col-span-2">
-            <FormField label="Immediate Verification">
+            <FormField label="Deskripsi Bagian B">
               <input
                 className={inputClass("verification")}
                 value={form.verification}
@@ -442,7 +438,7 @@ function NcrModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
           </div>
 
           <div className="md:col-span-2">
-            <FormField label="Corrective Action Plan" required error={errors.actionPlan}>
+            <FormField label="Rekomendasi NCR" required error={errors.actionPlan}>
               <textarea
                 rows={4}
                 className={`${inputClass("actionPlan")} resize-none`}

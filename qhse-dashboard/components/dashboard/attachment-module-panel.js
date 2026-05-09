@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { ChevronDown, Eye, FileImage, FileText, FolderKanban, Link2, Paperclip } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { isImageAttachment, readAttachmentStore } from "@/lib/attachment-store";
+import {
+  getAttachmentSnapshot,
+  isImageAttachment,
+  subscribeAttachmentStore,
+} from "@/lib/attachment-store";
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -47,8 +51,20 @@ export default function AttachmentModulePanel({
   contexts = [],
   seedAttachments = [],
 }) {
-  const [attachments] = useState(() => readAttachmentStore(seedAttachments));
   const [activeRecordId, setActiveRecordId] = useState(contexts[0]?.recordId || null);
+  const attachments = useSyncExternalStore(
+    subscribeAttachmentStore,
+    () => getAttachmentSnapshot(seedAttachments),
+    () => seedAttachments,
+  );
+
+  const resolvedRecordId = useMemo(() => {
+    if (activeRecordId && contexts.some((item) => item.recordId === activeRecordId)) {
+      return activeRecordId;
+    }
+
+    return contexts[0]?.recordId || null;
+  }, [activeRecordId, contexts]);
 
   const filteredAttachments = useMemo(() => {
     const validIds = new Set(contexts.map((item) => item.recordId));
@@ -58,8 +74,8 @@ export default function AttachmentModulePanel({
   }, [attachments, contexts]);
 
   const previewItems = useMemo(() => {
-    return filteredAttachments.filter((item) => item.recordId === activeRecordId);
-  }, [filteredAttachments, activeRecordId]);
+    return filteredAttachments.filter((item) => item.recordId === resolvedRecordId);
+  }, [filteredAttachments, resolvedRecordId]);
 
   return (
     <section className="rounded-[22px] border border-[#dfe9e3] bg-white p-5 shadow-sm">
@@ -151,7 +167,7 @@ export default function AttachmentModulePanel({
                   <Link2 size={13} />
                   Record ID
                 </div>
-                <p className="mt-2 text-[13px] font-medium text-[#243041]">{activeRecordId || "-"}</p>
+                <p className="mt-2 text-[13px] font-medium text-[#243041]">{resolvedRecordId || "-"}</p>
               </div>
               <div className="rounded-[16px] border border-[#edf1f4] bg-[#fafdfb] px-4 py-3">
                 <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">
