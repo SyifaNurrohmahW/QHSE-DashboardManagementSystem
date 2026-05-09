@@ -23,6 +23,7 @@ import {
   getIncidentList,
   updateIncident,
 } from "@/lib/services/incidentService";
+import { getKapalOptions } from "@/lib/services/kapalService";
 import {
   INCIDENT_CATEGORY_OPTIONS,
   INCIDENT_LEVEL_OPTIONS,
@@ -36,6 +37,8 @@ const TIPE_CARTER = ["FC", "TC", "Owner"];
 const EMPTY_FORM = {
   id: "",
   ref: "",
+  tugboat_id: "",
+  barge_id: "",
   tugboat: "",
   barge: "",
   start: "",
@@ -191,7 +194,7 @@ function DonutChart({ incidents }) {
   );
 }
 
-function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSaving }) {
+function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSaving, kapalOptions }) {
   const [form, setForm] = useState(() => ({
     ...EMPTY_FORM,
     ...initialData,
@@ -205,7 +208,18 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSav
     setForm((current) => ({ ...current, [key]: event.target.value }));
   };
 
-  const required = ["id", "tugboat", "barge", "start", "level", "category", "location", "status", "desc"];
+  const setKapal = (idKey, nameKey) => (event) => {
+    const selectedId = event.target.value;
+    const selectedKapal = kapalOptions.find((item) => String(item.value) === selectedId);
+
+    setForm((current) => ({
+      ...current,
+      [idKey]: selectedId,
+      [nameKey]: selectedKapal?.nama_kapal || "",
+    }));
+  };
+
+  const required = ["id", "tugboat_id", "barge_id", "start", "level", "category", "location", "status", "desc"];
 
   function handleSave() {
     const nextErrors = {};
@@ -273,12 +287,26 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSav
             </select>
           </FormField>
 
-          <FormField label="Tugboat" req error={errors.tugboat}>
-            <input className={inputCls("tugboat")} value={form.tugboat} onChange={set("tugboat")} placeholder="Nama tugboat" />
+          <FormField label="Tugboat" req error={errors.tugboat_id}>
+            <select className={inputCls("tugboat_id")} value={form.tugboat_id || ""} onChange={setKapal("tugboat_id", "tugboat")}>
+              <option value="">Pilih tugboat</option>
+              {kapalOptions.map((item) => (
+                <option key={`tugboat-${item.value}`} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </FormField>
 
-          <FormField label="Barge" req error={errors.barge}>
-            <input className={inputCls("barge")} value={form.barge} onChange={set("barge")} placeholder="Nama barge" />
+          <FormField label="Barge" req error={errors.barge_id}>
+            <select className={inputCls("barge_id")} value={form.barge_id || ""} onChange={setKapal("barge_id", "barge")}>
+              <option value="">Pilih barge</option>
+              {kapalOptions.map((item) => (
+                <option key={`barge-${item.value}`} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </FormField>
 
           <FormField label="Tanggal Mulai" req error={errors.start}>
@@ -509,6 +537,7 @@ export default function IncidentPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [kapalOptions, setKapalOptions] = useState([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -527,6 +556,14 @@ export default function IncidentPage() {
     }
 
     loadIncidents();
+
+    getKapalOptions()
+      .then((data) => {
+        if (isMounted) setKapalOptions(data);
+      })
+      .catch((error) => {
+        if (isMounted) setErrorMessage(error.message || "Gagal memuat data kapal.");
+      });
 
     return () => {
       isMounted = false;
@@ -872,6 +909,7 @@ export default function IncidentPage() {
           isEdit={!!editData}
           nextId={genId(incidents)}
           isSaving={isSaving}
+          kapalOptions={kapalOptions}
         />
       ) : null}
 

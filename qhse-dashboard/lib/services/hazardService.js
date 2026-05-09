@@ -17,6 +17,14 @@ function getYearMonthFromDate(dateString) {
     };
   }
 
+  const dateParts = String(dateString).match(/^(\d{4})-(\d{2})/);
+  if (dateParts) {
+    return {
+      tahun: Number(dateParts[1]),
+      bulan: Number(dateParts[2]),
+    };
+  }
+
   const date = new Date(dateString);
 
   return {
@@ -30,6 +38,7 @@ function toDatabasePayload(payload) {
 
   return {
     kapal_id: payload.kapal_id || null,
+    tanggal: payload.tanggal || null,
     tahun,
     bulan,
     target:
@@ -49,7 +58,7 @@ function fromDatabaseRow(row) {
     id: row.id,
     kapal_id: row.kapal_id,
     kapal: row.ms_kapal?.nama_kapal || "-",
-    tanggal: getDateFromYearMonth(row.tahun, row.bulan),
+    tanggal: row.tanggal || getDateFromYearMonth(row.tahun, row.bulan),
     tahun: row.tahun,
     bulan: row.bulan,
     target: row.target ?? 0,
@@ -72,6 +81,7 @@ export async function getHazardReports() {
         nama_kapal
       )
     `)
+    .order("tanggal", { ascending: false, nullsFirst: false })
     .order("tahun", { ascending: false })
     .order("bulan", { ascending: false });
 
