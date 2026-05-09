@@ -2,13 +2,60 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CalendarDays, ChevronDown, LogOut, Menu, User } from "lucide-react";
+import { AlertTriangle, Bell, CalendarDays, ChevronDown, Clock3, LogOut, Menu, User } from "lucide-react";
 import Swal from "sweetalert2";
 import {
   getCurrentUser,
   getCurrentUserRole,
   logoutUser,
 } from "@/lib/services/authService";
+import { getLsaFfaList } from "@/lib/services/lsaFfaService";
+
+function dateDiffInDays(date) {
+  if (!date) return null;
+
+  const today = new Date();
+  const target = new Date(date);
+
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+
+  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+}
+
+function getEquipmentAlert(item) {
+  const status = String(item.status || "").toLowerCase();
+
+  if (status === "nil") {
+    return null;
+  }
+
+  if (status === "expired") {
+    return { label: "Expired", severity: 0 };
+  }
+
+  const remainingDays = dateDiffInDays(item.nextInspectionDate);
+
+  if (remainingDays === null) {
+    return null;
+  }
+
+  if (remainingDays < 0) {
+    return { label: "Expired", severity: 0, remainingDays };
+  }
+
+  if (remainingDays <= Number(item.alertDays || 60)) {
+    return { label: "Warning", severity: 1, remainingDays };
+  }
+
+  return null;
+}
+
+function formatRemainingDays(days) {
+  if (days === null || days === undefined) return "-";
+  if (days < 0) return `${Math.abs(days)} hari lewat`;
+  return `${days} hari lagi`;
+}
 
 function formatRole(role) {
   if (!role) {
@@ -44,6 +91,8 @@ export default function DashboardTopbar({
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState(null);
   const [currentRole, setCurrentRole] = useState("");
+  const [equipmentAlerts, setEquipmentAlerts] = useState([]);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   useEffect(() => {
     async function loadLoggedInUser() {
@@ -64,8 +113,51 @@ export default function DashboardTopbar({
     loadLoggedInUser();
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getLsaFfaList()
+      .then((items) => {
+        if (!isMounted) return;
+
+        const alerts = items
+          .map((item) => {
+            const alert = getEquipmentAlert(item);
+            if (!alert) return null;
+
+            return {
+              ...item,
+              alertLabel: alert.label,
+              alertSeverity: alert.severity,
+              remainingDays: alert.remainingDays ?? dateDiffInDays(item.nextInspectionDate),
+            };
+          })
+          .filter(Boolean)
+          .sort((left, right) => {
+            if (left.alertSeverity !== right.alertSeverity) {
+              return left.alertSeverity - right.alertSeverity;
+            }
+
+            return Number(left.remainingDays ?? 9999) - Number(right.remainingDays ?? 9999);
+          });
+
+        setEquipmentAlerts(alerts);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setEquipmentAlerts([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const displayName = useMemo(() => getDisplayName(currentUser), [currentUser]);
   const userInitial = displayName.charAt(0).toUpperCase();
+  const notificationCount = equipmentAlerts.length;
+  const expiredCount = equipmentAlerts.filter((item) => item.alertLabel === "Expired").length;
+  const warningCount = equipmentAlerts.filter((item) => item.alertLabel === "Warning").length;
 
   async function handleLogout() {
     const result = await Swal.fire({
@@ -139,10 +231,84 @@ export default function DashboardTopbar({
           </div>
 
           <div className="relative">
-            <button className="inline-flex h-9 w-9 items-center justify-center text-[#2f3e4d]">
+            <button
+              type="button"
+              onClick={() => setIsNotificationOpen((current) => !current)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[#2f3e4d] transition hover:bg-[#f1f5f3]"
+              aria-label="Notifikasi equipment"
+            >
               <Bell size={18} />
             </button>
-            <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-[#ea4335]" />
+            {notificationCount > 0 ? (
+              <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#ea4335] px-1 text-[10px] font-bold leading-none text-white">
+                {notificationCount > 9 ? "9+" : notificationCount}
+              </span>
+            ) : null}
+
+            {isNotificationOpen ? (
+              <div className="absolute right-0 top-11 z-50 w-[340px] overflow-hidden rounded-[18px] border border-[#e3e8ed] bg-white shadow-[0_20px_45px_rgba(15,23,42,0.18)]">
+                <div className="border-b border-[#edf1f4] px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-bold text-[#1f2b38]">Equipment Alert</p>
+                      <p className="mt-0.5 text-[11px] text-[#7c8793]">
+                        {expiredCount} expired, {warningCount} warning
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsNotificationOpen(false);
+                        router.push("/dashboard/equipment");
+                      }}
+                      className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#15803d]"
+                    >
+                      Lihat semua
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-[320px] overflow-y-auto p-2">
+                  {notificationCount === 0 ? (
+                    <div className="px-4 py-8 text-center text-[12px] text-[#8b96a1]">
+                      Tidak ada equipment expired atau warning.
+                    </div>
+                  ) : (
+                    equipmentAlerts.slice(0, 6).map((item) => {
+                      const isExpired = item.alertLabel === "Expired";
+                      const Icon = isExpired ? AlertTriangle : Clock3;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setIsNotificationOpen(false);
+                            router.push("/dashboard/equipment");
+                          }}
+                          className="flex w-full items-start gap-3 rounded-[14px] px-3 py-3 text-left transition hover:bg-[#f8fafb]"
+                        >
+                          <span className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${isExpired ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                            <Icon size={16} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[12px] font-semibold text-[#243041]">
+                              {item.jenisEquipment || "-"}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[11px] text-[#667481]">
+                              {item.kapal || "-"} - {formatRemainingDays(item.remainingDays)}
+                            </span>
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isExpired ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                            {item.alertLabel}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2 rounded-full pl-1 pr-1">

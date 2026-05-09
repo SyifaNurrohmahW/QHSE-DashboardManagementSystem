@@ -54,6 +54,7 @@ function toDatabasePayload(payload) {
 
 function fromDatabaseRow(row) {
   return {
+    dbId: row.id,
     id: row.no_insiden,
     ref: row.no_referensi_client || "",
 

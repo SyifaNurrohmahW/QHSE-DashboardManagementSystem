@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   CalendarDays,
@@ -19,11 +19,15 @@ import {
   UserRound,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { isImageAttachment } from "@/lib/attachment-store";
 import {
-  isImageAttachment,
-  readAttachmentStore,
-  writeAttachmentStore,
-} from "@/lib/attachment-store";
+  deleteAttachment,
+  getAttachmentRecordOptions,
+  getAttachments,
+  uploadAttachment,
+} from "@/lib/services/attachmentServices";
+
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"]);
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -36,14 +40,6 @@ function formatDateTime(value) {
   });
 }
 
-function generateId(items) {
-  const next = items.reduce((max, item) => {
-    const current = Number(item.id.split("-")[1] || 0);
-    return Math.max(max, current);
-  }, 0);
-  return `ATT-${String(next + 1).padStart(3, "0")}`;
-}
-
 function fileSizeLabel(file) {
   if (!file) return "-";
   const sizeKb = file.size / 1024;
@@ -51,13 +47,31 @@ function fileSizeLabel(file) {
   return `${Math.max(1, Math.round(sizeKb))} KB`;
 }
 
-function toDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+function getContextValue(context) {
+  return context?.value || context?.moduleName || "";
+}
+
+function getContextLabel(context) {
+  return context?.label || context?.moduleName || context?.value || "-";
+}
+
+function guessMimeType(fileName = "") {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  if (!extension) return "";
+  return IMAGE_EXTENSIONS.has(extension) ? `image/${extension === "jpg" ? "jpeg" : extension}` : "";
+}
+
+function normalizeAttachment(item) {
+  const fileName = item.fileName || item.originalFileName || "-";
+
+  return {
+    ...item,
+    fileName,
+    originalFileName: item.originalFileName || fileName,
+    previewUrl: item.previewUrl || item.fileUrl || "",
+    mimeType: item.mimeType || guessMimeType(fileName),
+    sizeLabel: item.sizeLabel || "-",
+  };
 }
 
 function ReadonlyField({ label, value, icon: Icon }) {
@@ -101,21 +115,79 @@ export default function AttachmentSection({
   description = "Halaman ini didesain sebagai pola attachment yang bisa dipakai di semua modul, dengan file input yang sederhana dan metadata sistem yang otomatis tercatat.",
   badgeLabel = "Shared Attachment Hub",
   contexts = [],
-  initialAttachments = [],
 }) {
-  const [attachments, setAttachments] = useState(() => readAttachmentStore(initialAttachments));
+  const [attachments, setAttachments] = useState([]);
   const [activeContext, setActiveContext] = useState(contexts[0] || null);
+  const [recordId, setRecordId] = useState("");
+  const [recordOptions, setRecordOptions] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileName, setFileName] = useState("");
   const [fileInputKey, setFileInputKey] = useState(0);
-  const [selectedAttachmentId, setSelectedAttachmentId] = useState(
-    readAttachmentStore(initialAttachments)[0]?.id || null,
-  );
+  const [selectedAttachmentId, setSelectedAttachmentId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(Boolean(contexts[0]));
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getAttachments()
+      .then((result) => {
+        if (!isMounted) return;
+        setAttachments(result.map(normalizeAttachment));
+        setSelectedAttachmentId(result[0]?.id || null);
+        setErrorMessage("");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil attachment.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const moduleName = getContextValue(activeContext);
+    let isMounted = true;
+
+    if (!moduleName) return undefined;
+
+    getAttachmentRecordOptions(moduleName)
+      .then((result) => {
+        if (!isMounted) return;
+        setRecordOptions(result);
+        setRecordId(result[0]?.value ? String(result[0].value) : "");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil record modul.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsLoadingRecords(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeContext]);
 
   const selectedAttachment =
     attachments.find((item) => item.id === selectedAttachmentId) || attachments[0] || null;
+
+  const moduleLabelByValue = useMemo(() => {
+    return new Map(contexts.map((context) => [getContextValue(context), getContextLabel(context)]));
+  }, [contexts]);
 
   const stats = useMemo(() => {
     const total = attachments.length;
@@ -129,9 +201,11 @@ export default function AttachmentSection({
   const moduleSummary = useMemo(() => {
     return contexts
       .map((context) => {
-        const items = attachments.filter((item) => item.moduleName === context.moduleName);
+        const moduleName = getContextValue(context);
+        const items = attachments.filter((item) => item.moduleName === moduleName);
         return {
-          moduleName: context.moduleName,
+          moduleName,
+          label: getContextLabel(context),
           total: items.length,
           imageCount: items.filter((item) => isImageAttachment(item)).length,
           lastUpload: items[0]?.uploadedAt || null,
@@ -145,22 +219,26 @@ export default function AttachmentSection({
       const keyword = search.toLowerCase();
       return (
         !keyword ||
-        item.fileName.toLowerCase().includes(keyword) ||
-        item.moduleName.toLowerCase().includes(keyword) ||
-        item.recordId.toLowerCase().includes(keyword) ||
-        item.uploadedBy.toLowerCase().includes(keyword)
+        String(item.fileName || "").toLowerCase().includes(keyword) ||
+        String(item.moduleName || "").toLowerCase().includes(keyword) ||
+        String(item.recordId || "").toLowerCase().includes(keyword) ||
+        String(item.uploadedBy || "").toLowerCase().includes(keyword)
       );
     });
   }, [attachments, search]);
 
-  function syncAttachments(nextItems) {
-    setAttachments(nextItems);
-    writeAttachmentStore(nextItems);
-  }
-
   function resetForm(nextContext = activeContext) {
+    const isSameContext = getContextValue(nextContext) === getContextValue(activeContext);
+
     setSelectedFile(null);
     setFileName("");
+
+    if (!isSameContext) {
+      setRecordId("");
+      setRecordOptions([]);
+      setIsLoadingRecords(Boolean(getContextValue(nextContext)));
+    }
+
     setErrors({});
     setFileInputKey((current) => current + 1);
     setActiveContext(nextContext);
@@ -177,40 +255,66 @@ export default function AttachmentSection({
     const nextErrors = {};
     if (!selectedFile) nextErrors.file = true;
     if (!String(fileName || "").trim()) nextErrors.fileName = true;
+    if (!String(recordId || "").trim()) nextErrors.recordId = true;
 
     if (Object.keys(nextErrors).length || !activeContext) {
       setErrors(nextErrors);
       return;
     }
 
-    const previewUrl = selectedFile.type.startsWith("image/")
-      ? await toDataUrl(selectedFile)
-      : null;
+    try {
+      setIsSaving(true);
+      setErrorMessage("");
 
-    const newItem = {
-      id: generateId(attachments),
-      fileName: fileName.trim(),
-      originalFileName: selectedFile.name,
-      moduleName: activeContext.moduleName,
-      recordId: activeContext.recordId,
-      uploadedBy: activeContext.uploadedBy,
-      uploadedAt: new Date().toISOString(),
-      sizeLabel: fileSizeLabel(selectedFile),
-      mimeType: selectedFile.type || "application/octet-stream",
-      previewUrl,
-    };
+      const uploadFile =
+        fileName.trim() === selectedFile.name
+          ? selectedFile
+          : new File([selectedFile], fileName.trim(), {
+              type: selectedFile.type,
+              lastModified: selectedFile.lastModified,
+            });
 
-    const nextItems = [newItem, ...attachments];
-    syncAttachments(nextItems);
-    setSelectedAttachmentId(newItem.id);
-    resetForm(activeContext);
+      const created = await uploadAttachment({
+        moduleName: getContextValue(activeContext),
+        recordId: recordId.trim(),
+        file: uploadFile,
+      });
+
+      const enriched = {
+        ...normalizeAttachment(created),
+        sizeLabel: fileSizeLabel(uploadFile),
+        mimeType: uploadFile.type || created.mimeType,
+        previewUrl: uploadFile.type.startsWith("image/") ? created.fileUrl : null,
+      };
+
+      setAttachments((current) => [enriched, ...current]);
+      setSelectedAttachmentId(enriched.id);
+      window.dispatchEvent(new Event("qhse-attachments-updated"));
+      resetForm(activeContext);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menyimpan attachment.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleDelete(id) {
-    const nextItems = attachments.filter((item) => item.id !== id);
-    syncAttachments(nextItems);
-    if (selectedAttachmentId === id) {
-      setSelectedAttachmentId(nextItems[0]?.id || null);
+  async function handleDelete(id) {
+    try {
+      setIsDeleting(true);
+      setErrorMessage("");
+      await deleteAttachment(id);
+      setAttachments((current) => {
+        const nextItems = current.filter((item) => item.id !== id);
+        if (selectedAttachmentId === id) {
+          setSelectedAttachmentId(nextItems[0]?.id || null);
+        }
+        return nextItems;
+      });
+      window.dispatchEvent(new Event("qhse-attachments-updated"));
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menghapus attachment.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -228,10 +332,11 @@ export default function AttachmentSection({
 
             <div className="mt-5 flex flex-wrap gap-2">
               {contexts.map((context) => {
-                const isActive = activeContext?.recordId === context.recordId;
+                const contextValue = getContextValue(context);
+                const isActive = getContextValue(activeContext) === contextValue;
                 return (
                   <button
-                    key={context.recordId}
+                    key={contextValue}
                     onClick={() => resetForm(context)}
                     className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                       isActive
@@ -239,7 +344,7 @@ export default function AttachmentSection({
                         : "border border-white/20 bg-white/10 text-white/90 hover:bg-white/16"
                     }`}
                   >
-                    {context.moduleName}
+                    {getContextLabel(context)}
                   </button>
                 );
               })}
@@ -252,8 +357,8 @@ export default function AttachmentSection({
                 <span>Active Context</span>
                 <FolderKanban size={15} />
               </div>
-              <p className="mt-3 text-[18px] font-semibold leading-6">{activeContext?.moduleName || "-"}</p>
-              <p className="mt-2 text-[12px] text-white/78">{activeContext?.recordId || "-"}</p>
+              <p className="mt-3 text-[18px] font-semibold leading-6">{getContextLabel(activeContext)}</p>
+              <p className="mt-2 text-[12px] text-white/78">{recordId || "Record ID belum diisi"}</p>
             </div>
 
             <div className="rounded-[22px] border border-white/12 bg-white/10 p-4 backdrop-blur-sm">
@@ -294,6 +399,12 @@ export default function AttachmentSection({
           );
         })}
       </section>
+
+      {errorMessage ? (
+        <div className="rounded-[16px] border border-[#ffd7d7] bg-[#fff7f7] px-4 py-3 text-[13px] font-medium text-[#b42318]">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Card className="overflow-hidden border-[#edf1f4]">
@@ -374,9 +485,39 @@ export default function AttachmentSection({
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <ReadonlyField label="Module Name" value={activeContext?.moduleName} icon={FolderKanban} />
-                  <ReadonlyField label="Record ID" value={activeContext?.recordId} icon={Link2} />
-                  <ReadonlyField label="Uploaded By" value={activeContext?.uploadedBy} icon={UserRound} />
+                  <ReadonlyField label="Module Name" value={getContextLabel(activeContext)} icon={FolderKanban} />
+                  <div className="rounded-[16px] border border-[#e8edf1] bg-[#f8fbf9] px-4 py-3">
+                    <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">
+                      <Link2 size={13} />
+                      <span>Record ID</span>
+                    </div>
+                    <select
+                      value={recordId}
+                      onChange={(event) => {
+                        setRecordId(event.target.value);
+                        setErrors((current) => ({ ...current, recordId: false }));
+                      }}
+                      disabled={isLoadingRecords || recordOptions.length === 0}
+                      className={`mt-2 w-full rounded-[10px] border bg-white px-3 py-2 text-[13px] font-medium text-[#243041] outline-none focus:border-[#15803d] focus:ring-2 focus:ring-[#d1fae5] disabled:bg-[#eef2f5] disabled:text-[#8b96a1] ${
+                        errors.recordId ? "border-[#c53030]" : "border-[#dfe5ea]"
+                      }`}
+                    >
+                      {isLoadingRecords ? (
+                        <option value="">Memuat record...</option>
+                      ) : recordOptions.length ? (
+                        recordOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                            {option.description ? ` - ${option.description}` : ""}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Belum ada record untuk modul ini</option>
+                      )}
+                    </select>
+                    {errors.recordId ? <span className="mt-1 block text-[10px] text-[#c53030]">Record ID wajib diisi</span> : null}
+                  </div>
+                  <ReadonlyField label="Uploaded By" value="User login" icon={UserRound} />
                   <ReadonlyField label="Uploaded At" value={formatDateTime(new Date().toISOString())} icon={CalendarDays} />
                 </div>
               </div>
@@ -394,10 +535,11 @@ export default function AttachmentSection({
                   </button>
                   <button
                     onClick={handleSave}
+                    disabled={isSaving}
                     className="inline-flex items-center gap-2 rounded-[12px] bg-[#15803d] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#126c33]"
                   >
                     <Plus size={15} />
-                    Simpan Attachment
+                    {isSaving ? "Menyimpan..." : "Simpan Attachment"}
                   </button>
                 </div>
               </div>
@@ -415,7 +557,7 @@ export default function AttachmentSection({
                   <div key={item.moduleName} className="rounded-[18px] border border-[#edf1f4] bg-[#fafdfb] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[14px] font-semibold text-[#243041]">{item.moduleName}</p>
+                        <p className="text-[14px] font-semibold text-[#243041]">{item.label}</p>
                         <p className="mt-1 text-[12px] text-[#7c8793]">{item.total} attachment</p>
                       </div>
                       <div className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#1f9b58]">
@@ -439,7 +581,7 @@ export default function AttachmentSection({
                     <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">File Name</p>
                     <p className="mt-2 text-[14px] font-semibold text-[#243041]">{selectedAttachment.fileName}</p>
                   </div>
-                  <ReadonlyField label="Module Name" value={selectedAttachment.moduleName} icon={FolderKanban} />
+                  <ReadonlyField label="Module Name" value={moduleLabelByValue.get(selectedAttachment.moduleName) || selectedAttachment.moduleName} icon={FolderKanban} />
                   <ReadonlyField label="Record ID" value={selectedAttachment.recordId} icon={Link2} />
                   <ReadonlyField label="Uploaded By" value={selectedAttachment.uploadedBy} icon={UserRound} />
                   <ReadonlyField label="Uploaded At" value={formatDateTime(selectedAttachment.uploadedAt)} icon={CalendarDays} />
@@ -490,7 +632,13 @@ export default function AttachmentSection({
                 </tr>
               </thead>
               <tbody>
-                {filteredAttachments.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-14 text-center text-[13px] text-[#8b96a1]">
+                      Memuat attachment...
+                    </td>
+                  </tr>
+                ) : filteredAttachments.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-14 text-center text-[13px] text-[#8b96a1]">
                       Belum ada attachment yang cocok dengan pencarian saat ini.
@@ -514,7 +662,7 @@ export default function AttachmentSection({
                         <p className="font-medium leading-5 text-[#243041]">{item.fileName}</p>
                         <p className="mt-1 text-[11px] text-[#8b96a1]">Asli: {item.originalFileName}</p>
                       </td>
-                      <td className="px-3 py-3 text-[#51606d]">{item.moduleName}</td>
+                      <td className="px-3 py-3 text-[#51606d]">{moduleLabelByValue.get(item.moduleName) || item.moduleName}</td>
                       <td className="px-3 py-3 text-[#51606d]">{item.recordId}</td>
                       <td className="px-3 py-3 text-[#51606d]">{item.uploadedBy}</td>
                       <td className="px-3 py-3 text-[#51606d]">{formatDateTime(item.uploadedAt)}</td>
@@ -530,10 +678,11 @@ export default function AttachmentSection({
                           </button>
                           <button
                             onClick={() => handleDelete(item.id)}
+                            disabled={isDeleting}
                             className="inline-flex items-center gap-1 rounded-[9px] bg-[#fff0f0] px-2.5 py-1.5 text-[11px] font-semibold text-[#c53030] hover:bg-[#ffe1e1]"
                           >
                             <Trash2 size={13} />
-                            Hapus
+                            {isDeleting ? "Menghapus..." : "Hapus"}
                           </button>
                         </div>
                       </td>
