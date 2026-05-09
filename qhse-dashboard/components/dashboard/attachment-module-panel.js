@@ -1,14 +1,38 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, Eye, FileImage, FileText, FolderKanban, Link2, Paperclip } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  getAttachmentSnapshot,
   isImageAttachment,
-  subscribeAttachmentStore,
 } from "@/lib/attachment-store";
+import { getAttachments } from "@/lib/services/attachmentServices";
+
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"]);
+
+function guessMimeType(fileName = "") {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  if (!extension) return "";
+  return IMAGE_EXTENSIONS.has(extension) ? `image/${extension === "jpg" ? "jpeg" : extension}` : "";
+}
+
+function normalizeAttachment(item) {
+  const fileName = item.fileName || "-";
+
+  return {
+    ...item,
+    fileName,
+    previewUrl: item.previewUrl || item.fileUrl || "",
+    mimeType: item.mimeType || guessMimeType(fileName),
+    sizeLabel: item.sizeLabel || "-",
+  };
+}
+
+function getContextRecordIds(context) {
+  const ids = context?.recordIds || [context?.recordId];
+  return ids.filter(Boolean).map(String);
+}
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -49,14 +73,33 @@ export default function AttachmentModulePanel({
   title = "Attachment Modul",
   description = "Menampilkan hasil upload attachment yang terkait dengan record pada modul ini.",
   contexts = [],
-  seedAttachments = [],
 }) {
   const [activeRecordId, setActiveRecordId] = useState(contexts[0]?.recordId || null);
-  const attachments = useSyncExternalStore(
-    subscribeAttachmentStore,
-    () => getAttachmentSnapshot(seedAttachments),
-    () => seedAttachments,
-  );
+  const [attachments, setAttachments] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    function loadAttachments() {
+      getAttachments()
+        .then((result) => {
+          if (!isMounted) return;
+          setAttachments(result.map(normalizeAttachment));
+        })
+        .catch(() => {
+          if (!isMounted) return;
+          setAttachments([]);
+        });
+    }
+
+    loadAttachments();
+    window.addEventListener("qhse-attachments-updated", loadAttachments);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("qhse-attachments-updated", loadAttachments);
+    };
+  }, []);
 
   const resolvedRecordId = useMemo(() => {
     if (activeRecordId && contexts.some((item) => item.recordId === activeRecordId)) {
@@ -67,15 +110,19 @@ export default function AttachmentModulePanel({
   }, [activeRecordId, contexts]);
 
   const filteredAttachments = useMemo(() => {
-    const validIds = new Set(contexts.map((item) => item.recordId));
+    const validIds = new Set(contexts.flatMap(getContextRecordIds));
     return attachments.filter(
       (item) => item.moduleName === contexts[0]?.moduleName && validIds.has(item.recordId),
     );
   }, [attachments, contexts]);
 
   const previewItems = useMemo(() => {
-    return filteredAttachments.filter((item) => item.recordId === resolvedRecordId);
-  }, [filteredAttachments, resolvedRecordId]);
+    const activeContext =
+      contexts.find((item) => item.recordId === resolvedRecordId) || contexts[0];
+    const activeIds = new Set(getContextRecordIds(activeContext));
+
+    return filteredAttachments.filter((item) => activeIds.has(item.recordId));
+  }, [contexts, filteredAttachments, resolvedRecordId]);
 
   return (
     <section className="rounded-[22px] border border-[#dfe9e3] bg-white p-5 shadow-sm">
@@ -91,15 +138,19 @@ export default function AttachmentModulePanel({
 
         <div className="relative min-w-[220px]">
           <select
-            value={activeRecordId || ""}
+            value={resolvedRecordId || ""}
             onChange={(event) => setActiveRecordId(event.target.value)}
             className="w-full appearance-none rounded-[14px] border border-[#dfe5ea] bg-white px-4 py-3 pr-10 text-[12px] font-semibold text-[#243041] outline-none transition focus:border-[#15803d] focus:ring-2 focus:ring-[#d1fae5]"
           >
-            {contexts.map((context) => (
-              <option key={context.recordId} value={context.recordId}>
-                {context.recordId} - {context.uploadedBy}
-              </option>
-            ))}
+            {contexts.length ? (
+              contexts.map((context) => (
+                <option key={context.recordId} value={context.recordId}>
+                  {context.recordId} - {context.uploadedBy}
+                </option>
+              ))
+            ) : (
+              <option value="">Belum ada record</option>
+            )}
           </select>
           <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#8b96a1]" />
         </div>

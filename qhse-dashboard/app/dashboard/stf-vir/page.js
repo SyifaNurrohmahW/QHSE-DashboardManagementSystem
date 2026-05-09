@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardCheck,
   Target,
   BarChart3,
   Ship,
   Plus,
-  Filter,
   Eye,
   Pencil,
   Trash2,
@@ -15,48 +14,34 @@ import {
   CalendarDays,
   FileText,
 } from "lucide-react";
+import AttachmentModulePanel from "@/components/dashboard/attachment-module-panel";
 import { Card, CardContent } from "@/components/ui/card";
-
-const KAPAL_LIST = [
-  "MV Adaro Pioneer",
-  "MV South Borneo",
-  "MV Energi Nusantara",
-  "MV Adaro Maritim",
-];
+import {
+  getStfVirList,
+  createStfVir,
+  updateStfVir,
+  deleteStfVir,
+} from "@/lib/services/stfVirService";
+import { getKapalOptions } from "@/lib/services/kapalService";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
-const REPORT_TYPES = ["STF & VIR", "Management Visit"];
-
-const INITIAL_DATA = [
+const REPORT_TYPES = [
   {
-    id: "SV-2026-001",
-    kapal: "MV Adaro Pioneer",
-    tahun: 2026,
-    bulan: "Januari",
-    tipeReport: "STF & VIR",
-    target: 2,
-    total: 2,
-    keterangan: "Target safety tour finding tercapai.",
+    label: "STF & VIR",
+    value: "stf_vir",
   },
   {
-    id: "SV-2026-002",
-    kapal: "MV South Borneo",
-    tahun: 2026,
-    bulan: "Januari",
-    tipeReport: "Management Visit",
-    target: 1,
-    total: 0,
-    keterangan: "VIR belum dilakukan bulan ini.",
+    label: "Management Visit",
+    value: "management_visit",
   },
 ];
 
 const EMPTY_FORM = {
-  id: "",
-  kapal: "",
+  kapal_id: "",
   tahun: new Date().getFullYear(),
   bulan: "",
   tipeReport: "",
@@ -64,12 +49,6 @@ const EMPTY_FORM = {
   total: "",
   keterangan: "",
 };
-
-function genId(data) {
-  const nums = data.map((i) => Number(i.id.split("-")[2])).filter(Boolean);
-  const max = nums.length ? Math.max(...nums) : 0;
-  return `SV-${new Date().getFullYear()}-${String(max + 1).padStart(3, "0")}`;
-}
 
 function achievement(total, target) {
   if (!target || Number(target) === 0) return 0;
@@ -122,8 +101,8 @@ function AchievementBadge({ total, target }) {
   );
 }
 
-function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
-  const [form, setForm] = useState(initialData || { ...EMPTY_FORM, id: nextId });
+function FormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOptions, isSaving }) {
+  const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
   if (!isOpen) return null;
@@ -133,6 +112,15 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
       ...prev,
       [key]: e.target.value,
     }));
+    setErrors((prev) => ({ ...prev, [key]: false }));
+  };
+
+  const setKapal = (e) => {
+    setForm((prev) => ({
+      ...prev,
+      kapal_id: e.target.value,
+    }));
+    setErrors((prev) => ({ ...prev, kapal_id: false }));
   };
 
   const inputCls = (key) =>
@@ -141,7 +129,7 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
     }`;
 
   function handleSave() {
-    const required = ["kapal", "tahun", "bulan", "tipeReport", "target", "total"];
+    const required = ["kapal_id", "tahun", "bulan", "tipeReport", "target", "total"];
     const errs = {};
 
     required.forEach((key) => {
@@ -155,7 +143,6 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
 
     onSave({
       ...form,
-      id: form.id || nextId,
       tahun: Number(form.tahun),
       target: Number(form.target),
       total: Number(form.total),
@@ -189,19 +176,11 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
         </div>
 
         <div className="grid grid-cols-2 gap-3 px-5 py-4">
-          <FormField label="No. Record">
-            <input
-              value={form.id || nextId}
-              readOnly
-              className={`${inputCls("id")} bg-[#f8f9fb] text-[#8a95a2]`}
-            />
-          </FormField>
-
-          <FormField label="Kapal" req error={errors.kapal}>
-            <select className={inputCls("kapal")} value={form.kapal} onChange={set("kapal")}>
+          <FormField label="Kapal" req error={errors.kapal_id}>
+            <select className={inputCls("kapal_id")} value={form.kapal_id || ""} onChange={setKapal}>
               <option value="">-- Pilih Kapal --</option>
-              {KAPAL_LIST.map((kapal) => (
-                <option key={kapal} value={kapal}>{kapal}</option>
+              {kapalOptions.map((kapal) => (
+                <option key={kapal.value} value={kapal.value}>{kapal.label}</option>
               ))}
             </select>
           </FormField>
@@ -233,7 +212,9 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
             >
               <option value="">-- Pilih Tipe --</option>
               {REPORT_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
               ))}
             </select>
           </FormField>
@@ -276,6 +257,7 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
         <div className="flex justify-end gap-2 border-t border-[#edf1f4] px-5 py-3">
           <button
             onClick={onClose}
+            disabled={isSaving}
             className="rounded-[8px] bg-[#f4f7f9] px-4 py-2 text-[12px] font-medium text-[#5c6a77] hover:bg-[#eaeff3]"
           >
             Batal
@@ -283,9 +265,10 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId }) {
 
           <button
             onClick={handleSave}
+            disabled={isSaving}
             className="rounded-[8px] bg-emerald-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-emerald-700"
           >
-            {isEdit ? "Simpan Perubahan" : "Simpan Data"}
+            {isSaving ? "Menyimpan..." : isEdit ? "Simpan Perubahan" : "Simpan Data"}
           </button>
         </div>
       </div>
@@ -347,7 +330,7 @@ function DetailModal({ data, onClose }) {
   );
 }
 
-function ConfirmModal({ isOpen, itemId, onCancel, onConfirm }) {
+function ConfirmModal({ isOpen, itemId, onCancel, onConfirm, isDeleting }) {
   if (!isOpen) return null;
 
   return (
@@ -359,21 +342,23 @@ function ConfirmModal({ isOpen, itemId, onCancel, onConfirm }) {
 
         <p className="mb-1 text-[15px] font-semibold text-[#1f2b38]">Hapus Data STF & VIR?</p>
         <p className="mb-5 text-[12px] text-[#7a8692]">
-          Data <span className="font-semibold text-[#1f2b38]">{itemId}</span> akan dihapus.
+          Data <span className="font-semibold text-[#1f2b38]">{itemId}</span> akan dihapus dari Supabase.
         </p>
 
         <div className="flex justify-center gap-2">
           <button
             onClick={onCancel}
+            disabled={isDeleting}
             className="rounded-[8px] bg-[#f4f7f9] px-5 py-2 text-[12px] font-medium text-[#5c6a77] hover:bg-[#eaeff3]"
           >
             Batal
           </button>
           <button
             onClick={onConfirm}
+            disabled={isDeleting}
             className="rounded-[8px] bg-red-600 px-5 py-2 text-[12px] font-semibold text-white hover:bg-red-700"
           >
-            Ya, Hapus
+            {isDeleting ? "Menghapus..." : "Ya, Hapus"}
           </button>
         </div>
       </div>
@@ -382,11 +367,49 @@ function ConfirmModal({ isOpen, itemId, onCancel, onConfirm }) {
 }
 
 export default function StfVirPage() {
-  const [data, setData] = useState(INITIAL_DATA);
+  const [data, setData] = useState([]);
+  const [kapalOptions, setKapalOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState(null);
   const [detailData, setDetailData] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getStfVirList()
+      .then((result) => {
+        if (!isMounted) return;
+        setData(result);
+        setErrorMessage("");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil data STF & VIR.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    getKapalOptions()
+      .then((result) => {
+        if (!isMounted) return;
+        setKapalOptions(result);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil data kapal.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const totalTarget = useMemo(
     () => data.reduce((sum, item) => sum + Number(item.target || 0), 0),
@@ -401,6 +424,15 @@ export default function StfVirPage() {
   const totalStfVir = data.filter((item) => item.tipeReport === "STF & VIR").length;
   const totalManagementVisit = data.filter((item) => item.tipeReport === "Management Visit").length;
   const achievementTotal = achievement(totalActual, totalTarget);
+  const activePeriod = data[0]?.tahun || new Date().getFullYear();
+
+  const attachmentContexts = useMemo(() => {
+    return data.map((item) => ({
+      moduleName: "stf_vir",
+      recordId: String(item.id),
+      uploadedBy: item.kapal,
+    }));
+  }, [data]);
 
   const stats = [
     {
@@ -443,20 +475,40 @@ export default function StfVirPage() {
     setModalOpen(true);
   }
 
-  function handleSave(payload) {
-    if (editData) {
-      setData((prev) => prev.map((item) => (item.id === payload.id ? payload : item)));
-    } else {
-      setData((prev) => [payload, ...prev]);
-    }
+  async function handleSave(payload) {
+    try {
+      setIsSaving(true);
+      setErrorMessage("");
 
-    setModalOpen(false);
-    setEditData(null);
+      if (editData) {
+        const updated = await updateStfVir(editData.id, payload);
+        setData((prev) => prev.map((item) => (item.id === editData.id ? updated : item)));
+      } else {
+        const created = await createStfVir(payload);
+        setData((prev) => [created, ...prev]);
+      }
+
+      setModalOpen(false);
+      setEditData(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menyimpan data STF & VIR.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleDelete() {
-    setData((prev) => prev.filter((item) => item.id !== deleteTarget));
-    setDeleteTarget(null);
+  async function handleDelete() {
+    try {
+      setIsDeleting(true);
+      setErrorMessage("");
+      await deleteStfVir(deleteTarget);
+      setData((prev) => prev.filter((item) => item.id !== deleteTarget));
+      setDeleteTarget(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menghapus data STF & VIR.");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (
@@ -474,7 +526,7 @@ export default function StfVirPage() {
             </h1>
 
             <p className="mt-2 max-w-2xl text-[13px] text-white/82">
-              Kelola target dan realisasi STF & VIR berdasarkan kapal, bulan, dan tahun.
+              Kelola target dan realisasi STF & VIR berdasarkan data dari Supabase.
             </p>
           </div>
 
@@ -487,10 +539,6 @@ export default function StfVirPage() {
               Tambah STF/VIR
             </button>
 
-            <button className="inline-flex items-center gap-2 rounded-[10px] border border-white/25 px-4 py-2.5 text-[13px] font-semibold text-white">
-              <Filter size={16} />
-              Filter Data
-            </button>
           </div>
         </div>
 
@@ -499,7 +547,7 @@ export default function StfVirPage() {
             <p className="text-[12px] text-white/70">Periode Aktif</p>
             <div className="mt-2 flex items-center gap-2">
               <CalendarDays size={18} className="text-white" />
-              <span className="text-[20px] font-bold">2026</span>
+              <span className="text-[20px] font-bold">{activePeriod}</span>
             </div>
           </div>
 
@@ -544,6 +592,12 @@ export default function StfVirPage() {
         })}
       </section>
 
+      {errorMessage ? (
+        <div className="rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-medium text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
+
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div className="flex items-center justify-between border-b border-[#edf1f4] px-5 py-4">
@@ -560,12 +614,7 @@ export default function StfVirPage() {
           </div>
 
           <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 420 }}>
-            {data.length === 0 ? (
-              <div className="py-12 text-center text-[13px] text-[#9aa4ae]">
-                Belum ada data STF & VIR.
-              </div>
-            ) : (
-              <table className="min-w-[920px] w-full border-collapse text-[11px]">
+            <table className="min-w-[920px] w-full border-collapse text-[11px]">
                 <thead>
                   <tr className="sticky top-0 z-10 bg-[#f8fafb]">
                     {[
@@ -591,7 +640,20 @@ export default function StfVirPage() {
                 </thead>
 
                 <tbody>
-                  {data.map((item) => (
+                  {loading ? (
+                    <tr>
+                      <td colSpan={10} className="py-12 text-center text-[13px] text-[#9aa4ae]">
+                        Memuat data STF & VIR...
+                      </td>
+                    </tr>
+                  ) : data.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="py-12 text-center text-[13px] text-[#9aa4ae]">
+                        Belum ada data STF & VIR.
+                      </td>
+                    </tr>
+                  ) : (
+                    data.map((item) => (
                     <tr key={item.id} className="border-b border-[#f0f3f5] hover:bg-[#fafbfc]">
                       <td className="whitespace-nowrap px-3 py-3 font-medium text-[#5c6a77]">
                         {item.id}
@@ -648,26 +710,33 @@ export default function StfVirPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    ))
+                  )}
                 </tbody>
               </table>
-            )}
           </div>
         </CardContent>
       </Card>
 
+      <AttachmentModulePanel
+        title="Attachment STF & VIR"
+        description="File dari halaman Attachment akan tampil jika record id dan module name cocok."
+        contexts={attachmentContexts}
+      />
+
       {modalOpen && (
         <FormModal
-          key={editData?.id || genId(data)}
+          key={editData?.id || modalOpen}
           isOpen={modalOpen}
           onClose={() => {
             setModalOpen(false);
             setEditData(null);
           }}
           onSave={handleSave}
-          initialData={editData}
+          initialData={editData || EMPTY_FORM}
           isEdit={!!editData}
-          nextId={genId(data)}
+          kapalOptions={kapalOptions}
+          isSaving={isSaving}
         />
       )}
 
@@ -678,6 +747,7 @@ export default function StfVirPage() {
         itemId={deleteTarget}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
+        isDeleting={isDeleting}
       />
     </div>
   );

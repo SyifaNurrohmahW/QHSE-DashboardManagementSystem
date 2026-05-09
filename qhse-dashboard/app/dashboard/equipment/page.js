@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,56 +13,11 @@ import {
   X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-
-const INITIAL_EQUIPMENT = [
-  {
-    id: "EQ-001",
-    kapal: "MV Adaro Pioneer",
-    jenisEquipment: "EPIRB",
-    qty: "1 Unit",
-    lastInspectionDate: "2025-01-01",
-    nextInspectionDate: "2026-05-20",
-    alertDays: 60,
-    status: "Sudah",
-    keterangan: "Valid dan siap digunakan",
-  },
-  {
-    id: "EQ-002",
-    kapal: "MV South Borneo",
-    jenisEquipment: "Liferaft",
-    qty: "2 Unit",
-    lastInspectionDate: "2025-02-12",
-    nextInspectionDate: "2026-04-30",
-    alertDays: 60,
-    status: "Sudah",
-    keterangan: "Akan segera jatuh tempo inspeksi",
-  },
-  {
-    id: "EQ-003",
-    kapal: "MV Energi Nusantara",
-    jenisEquipment: "CO2 System",
-    qty: "1 Set",
-    lastInspectionDate: "2024-12-10",
-    nextInspectionDate: "2026-03-15",
-    alertDays: 60,
-    status: "Expired",
-    keterangan: "Perlu tindakan segera",
-  },
-  {
-    id: "EQ-004",
-    kapal: "MV Adaro Maritim",
-    jenisEquipment: "SCBA / EEBD",
-    qty: "4 Unit",
-    lastInspectionDate: "",
-    nextInspectionDate: "",
-    alertDays: 60,
-    status: "NIL",
-    keterangan: "Tidak tersedia di kapal ini",
-  },
-];
+import { getLsaFfaList } from "@/lib/services/lsaFfaService";
 
 function dateDiffInDays(date) {
   if (!date) return null;
+
   const today = new Date();
   const target = new Date(date);
 
@@ -74,6 +29,7 @@ function dateDiffInDays(date) {
 
 function formatDate(date) {
   if (!date) return "-";
+
   return new Date(date).toLocaleDateString("id-ID", {
     day: "2-digit",
     month: "short",
@@ -81,13 +37,41 @@ function formatDate(date) {
   });
 }
 
+function normalizeStatus(status) {
+  if (!status) return "";
+
+  const value = String(status).toLowerCase();
+
+  const labels = {
+    sudah: "Sudah",
+    belum: "Belum",
+    expired: "Expired",
+    perlu_perbaikan: "Perlu Perbaikan",
+    nil: "NIL",
+    proses: "Proses",
+  };
+
+  return labels[value] || status;
+}
+
 function getAlertStatus(item) {
-  if (item.status === "NIL") {
+  const status = String(item.status || "").toLowerCase();
+
+  if (status === "nil") {
     return {
       label: "NIL",
       tone: "bg-slate-100 text-slate-600",
       row: "bg-white",
       icon: Clock3,
+    };
+  }
+
+  if (status === "expired") {
+    return {
+      label: "Expired",
+      tone: "bg-red-50 text-red-700",
+      row: "bg-red-50/40",
+      icon: AlertTriangle,
     };
   }
 
@@ -130,10 +114,13 @@ function getAlertStatus(item) {
 
 function AlertBadge({ item }) {
   const alert = getAlertStatus(item);
+  const Icon = alert.icon;
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ${alert.tone}`}>
-      <alert.icon size={12} />
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ${alert.tone}`}
+    >
+      <Icon size={12} />
       {alert.label}
     </span>
   );
@@ -143,32 +130,37 @@ function DetailModal({ data, onClose }) {
   if (!data) return null;
 
   const remainingDays = dateDiffInDays(data.nextInspectionDate);
+
   const rows = [
-    ["Kapal", data.kapal],
-    ["Jenis Equipment", data.jenisEquipment],
-    ["Qty", data.qty],
+    ["Kapal", data.kapal || "-"],
+    ["Kode Kapal", data.kodeKapal || "-"],
+    ["Jenis Equipment", data.jenisEquipment || "-"],
+    ["Qty", data.qty || "-"],
     ["Last Inspection", formatDate(data.lastInspectionDate)],
     ["Next Inspection", formatDate(data.nextInspectionDate)],
+    ["Bulan Expired", data.bulanExpired || "-"],
     ["Alert Days", `${data.alertDays || 0} hari`],
     ["Sisa Hari", remainingDays === null ? "-" : `${remainingDays} hari`],
-    ["Status Input", data.status],
+    ["Status Input", normalizeStatus(data.status)],
     ["Keterangan", data.keterangan || "-"],
   ];
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-[620px] rounded-[16px] border border-[#e5eaee] bg-white shadow-lg">
+      <div className="w-full max-w-[680px] rounded-[16px] border border-[#e5eaee] bg-white shadow-lg">
         <div className="flex items-center justify-between border-b border-[#edf1f4] px-5 py-4">
           <div>
             <p className="text-[15px] font-semibold text-[#1f2b38]">
               Detail Equipment Alert
             </p>
-            <p className="mt-0.5 text-[11px] text-[#8a95a2]">{data.id}</p>
+            <p className="mt-0.5 text-[11px] text-[#8a95a2]">
+              {data.id}
+            </p>
           </div>
 
           <button
@@ -179,9 +171,12 @@ function DetailModal({ data, onClose }) {
           </button>
         </div>
 
-        <div className="grid gap-3 p-5 sm:grid-cols-2">
+        <div className="grid max-h-[70vh] gap-3 overflow-y-auto p-5 sm:grid-cols-2">
           {rows.map(([label, value]) => (
-            <div key={label} className="rounded-[12px] border border-[#edf1f4] bg-[#fafbfc] px-4 py-3">
+            <div
+              key={label}
+              className="rounded-[12px] border border-[#edf1f4] bg-[#fafbfc] px-4 py-3"
+            >
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">
                 {label}
               </p>
@@ -197,10 +192,30 @@ function DetailModal({ data, onClose }) {
 }
 
 export default function EquipmentExpiryAlertPage() {
-  const [equipment] = useState(INITIAL_EQUIPMENT);
+  const [equipment, setEquipment] = useState([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [detailData, setDetailData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function loadEquipment() {
+    setLoading(true);
+    setErrorMessage("");
+
+    try {
+      const data = await getLsaFfaList();
+      setEquipment(data);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal mengambil data equipment.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadEquipment();
+  }, []);
 
   const computedEquipment = useMemo(() => {
     return equipment.map((item) => {
@@ -220,21 +235,34 @@ export default function EquipmentExpiryAlertPage() {
       const keyword = search.toLowerCase();
 
       const matchSearch =
-        item.kapal.toLowerCase().includes(keyword) ||
-        item.jenisEquipment.toLowerCase().includes(keyword) ||
-        item.status.toLowerCase().includes(keyword);
+        !keyword ||
+        String(item.kapal || "").toLowerCase().includes(keyword) ||
+        String(item.kodeKapal || "").toLowerCase().includes(keyword) ||
+        String(item.jenisEquipment || "").toLowerCase().includes(keyword) ||
+        String(item.status || "").toLowerCase().includes(keyword) ||
+        String(item.keterangan || "").toLowerCase().includes(keyword);
 
       const matchStatus =
-        filterStatus === "all" || item.alertLabel.toLowerCase() === filterStatus;
+        filterStatus === "all" ||
+        String(item.alertLabel || "").toLowerCase() === filterStatus;
 
       return matchSearch && matchStatus;
     });
   }, [computedEquipment, search, filterStatus]);
 
   const totalEquipment = computedEquipment.length;
-  const expiredCount = computedEquipment.filter((i) => i.alertLabel === "Expired").length;
-  const warningCount = computedEquipment.filter((i) => i.alertLabel === "Warning").length;
-  const safeCount = computedEquipment.filter((i) => i.alertLabel === "Aman").length;
+  const expiredCount = computedEquipment.filter(
+    (item) => item.alertLabel === "Expired"
+  ).length;
+  const warningCount = computedEquipment.filter(
+    (item) => item.alertLabel === "Warning"
+  ).length;
+  const safeCount = computedEquipment.filter(
+    (item) => item.alertLabel === "Aman"
+  ).length;
+  const nilCount = computedEquipment.filter(
+    (item) => item.alertLabel === "NIL"
+  ).length;
 
   const nearestEquipment = computedEquipment
     .filter((item) => item.remainingDays !== null)
@@ -265,7 +293,7 @@ export default function EquipmentExpiryAlertPage() {
     {
       title: "Aman",
       value: String(safeCount).padStart(2, "0"),
-      note: "Masih valid",
+      note: `${nilCount} equipment NIL`,
       icon: CheckCircle2,
       tone: "bg-blue-50 text-blue-700",
     },
@@ -308,7 +336,9 @@ export default function EquipmentExpiryAlertPage() {
           <div className="bg-black/10 px-5 py-4">
             <p className="text-[12px] text-white/70">Alert Rule</p>
             <p className="mt-2 text-[20px] font-bold">≤ 60 Hari</p>
-            <p className="mt-1 text-[12px] text-white/75">Default warning period</p>
+            <p className="mt-1 text-[12px] text-white/75">
+              Default warning period
+            </p>
           </div>
 
           <div className="bg-black/10 px-5 py-4">
@@ -324,7 +354,9 @@ export default function EquipmentExpiryAlertPage() {
             <p className="mt-2 text-[24px] font-bold leading-none">
               {expiredCount + warningCount}
             </p>
-            <p className="mt-1 text-[12px] text-white/75">Expired + Warning</p>
+            <p className="mt-1 text-[12px] text-white/75">
+              Expired + Warning
+            </p>
           </div>
         </div>
       </section>
@@ -338,14 +370,20 @@ export default function EquipmentExpiryAlertPage() {
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[14px] font-medium text-[#44505e]">{item.title}</p>
+                    <p className="text-[14px] font-medium text-[#44505e]">
+                      {item.title}
+                    </p>
                     <p className="mt-2 text-[24px] font-bold leading-none text-[#1f2b38]">
                       {item.value}
                     </p>
-                    <p className="mt-2 text-[12px] text-[#73808d]">{item.note}</p>
+                    <p className="mt-2 text-[12px] text-[#73808d]">
+                      {item.note}
+                    </p>
                   </div>
 
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-full ${item.tone}`}>
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-full ${item.tone}`}
+                  >
                     <Icon size={22} strokeWidth={2.1} />
                   </div>
                 </div>
@@ -363,26 +401,32 @@ export default function EquipmentExpiryAlertPage() {
                 Equipment Alert Register
               </h2>
               <p className="mt-1 text-[12px] text-[#7a8692]">
-                Daftar equipment berdasarkan next inspection date.
+                Daftar equipment berdasarkan next inspection date dari modul LSA & FFA.
               </p>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b96a1]" />
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b96a1]"
+                />
                 <input
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="Cari kapal/equipment..."
                   className="w-full rounded-[10px] border border-[#dde3e8] bg-white py-2 pl-9 pr-3 text-[12px] focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-[240px]"
                 />
               </div>
 
               <div className="relative">
-                <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b96a1]" />
+                <Filter
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b96a1]"
+                />
                 <select
                   value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
+                  onChange={(event) => setFilterStatus(event.target.value)}
                   className="w-full rounded-[10px] border border-[#dde3e8] bg-white py-2 pl-9 pr-3 text-[12px] focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-[180px]"
                 >
                   <option value="all">Semua Status</option>
@@ -396,7 +440,15 @@ export default function EquipmentExpiryAlertPage() {
           </div>
 
           <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 430 }}>
-            {filteredEquipment.length === 0 ? (
+            {loading ? (
+              <div className="py-12 text-center text-[13px] text-[#9aa4ae]">
+                Memuat data equipment dari LSA & FFA...
+              </div>
+            ) : errorMessage ? (
+              <div className="py-12 text-center text-[13px] text-red-600">
+                {errorMessage}
+              </div>
+            ) : filteredEquipment.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-[#9aa4ae]">
                 Tidak ada data equipment.
               </div>
@@ -411,6 +463,7 @@ export default function EquipmentExpiryAlertPage() {
                       "LAST INSPECTION",
                       "NEXT INSPECTION",
                       "SISA HARI",
+                      "STATUS INPUT",
                       "ALERT",
                       "KETERANGAN",
                       "AKSI",
@@ -441,7 +494,7 @@ export default function EquipmentExpiryAlertPage() {
                           {item.jenisEquipment}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
-                          {item.qty}
+                          {item.qty || "-"}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
                           {formatDate(item.lastInspectionDate)}
@@ -450,13 +503,20 @@ export default function EquipmentExpiryAlertPage() {
                           {formatDate(item.nextInspectionDate)}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#4a5568]">
-                          {item.remainingDays === null ? "-" : `${item.remainingDays} hari`}
+                          {item.remainingDays === null
+                            ? "-"
+                            : `${item.remainingDays} hari`}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
+                          {normalizeStatus(item.status)}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3">
                           <AlertBadge item={item} />
                         </td>
                         <td className="max-w-[220px] px-3 py-3 text-[#6b7280]">
-                          <p className="line-clamp-2">{item.keterangan || "-"}</p>
+                          <p className="line-clamp-2">
+                            {item.keterangan || "-"}
+                          </p>
                         </td>
                         <td className="whitespace-nowrap px-3 py-3">
                           <button
