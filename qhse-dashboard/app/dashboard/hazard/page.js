@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -14,6 +14,13 @@ import {
   X,
   FileText,
 } from "lucide-react";
+import {
+  getHazardReports,
+  createHazardReport,
+  updateHazardReport,
+  deleteHazardReport,
+} from "@/lib/services/hazardService";
+import { getKapalOptions } from "@/lib/services/kapalService";
 import { Card, CardContent } from "@/components/ui/card";
 import AttachmentModulePanel from "@/components/dashboard/attachment-module-panel";
 
@@ -54,12 +61,21 @@ const initialHazardReports = [
 
 const emptyForm = {
   id: null,
+  kapal_id: "",
   kapal: "",
   tanggal: "",
   target: "",
   totalReport: "",
   keterangan: "",
 };
+
+const CATEGORIES = [
+  "Material",
+  "Equipment",
+  "Environment",
+  "People",
+  "System",
+];
 
 const monthFormatter = new Intl.DateTimeFormat("id-ID", {
   month: "long",
@@ -107,15 +123,19 @@ function SummaryCard({ title, value, note, icon: Icon, tone }) {
   );
 }
 
-function HazardModal({ isOpen, form, onChange, onClose, onSubmit }) {
-  if (!isOpen) {
-    return null;
-  }
+function HazardModal({
+  isOpen,
+  form,
+  kapalOptions,
+  onChange,
+  onClose,
+  onSubmit,
+}) {
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1720]/55 px-4 py-6">
-      <div className="w-full max-w-2xl overflow-hidden rounded-[24px] bg-white shadow-[0_24px_60px_rgba(15,23,32,0.25)]">
-        <div className="flex items-start justify-between border-b border-[#edf1f4] px-6 py-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1720]/55 px-4 py-4 sm:py-6">
+      <div className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-[22px] bg-white shadow-[0_24px_60px_rgba(15,23,32,0.25)]">
+        <div className="flex items-start justify-between border-b border-[#edf1f4] px-5 py-4 sm:px-6 sm:py-5">
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#d35454]">
               {form.id ? "Ubah Hazard Report" : "Input Hazard Report"}
@@ -137,19 +157,26 @@ function HazardModal({ isOpen, form, onChange, onClose, onSubmit }) {
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-5 px-6 py-6">
+        <form onSubmit={onSubmit} className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+          <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2">
-              <span className="text-[13px] font-semibold text-[#304050]">Kapal</span>
-              <input
-                name="kapal"
-                value={form.kapal}
-                onChange={onChange}
-                placeholder="Contoh: MV Adaro Pioneer"
-                className="w-full rounded-[14px] border border-[#dbe3e8] bg-white px-4 py-3 text-[14px] text-[#243041] outline-none transition focus:border-[#d35454] focus:ring-4 focus:ring-[#f8d7d7]"
-                required
-              />
-            </label>
+            <span className="text-[13px] font-semibold text-[#304050]">Kapal</span>
+                  <select
+                  name="kapal_id"
+                  value={form.kapal_id}
+                  onChange={onChange}
+                  className="w-full rounded-[14px] border border-[#dbe3e8] bg-white px-4 py-3 text-[14px] text-[#243041] outline-none transition focus:border-[#d35454] focus:ring-4 focus:ring-[#f8d7d7]"
+                  required
+                >
+                  <option value="">-- Pilih Kapal --</option>
+                  {kapalOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
             <label className="space-y-2">
               <span className="text-[13px] font-semibold text-[#304050]">Tanggal</span>
@@ -191,7 +218,24 @@ function HazardModal({ isOpen, form, onChange, onClose, onSubmit }) {
               />
             </label>
 
-           
+            <label className="space-y-2">
+              <span className="text-[13px] font-semibold text-[#304050]">Kategori Hazard</span>
+              <select
+                name="kategori"
+                value={form.kategori}
+                onChange={onChange}
+                className="w-full rounded-[14px] border border-[#dbe3e8] bg-white px-4 py-3 text-[14px] text-[#243041] outline-none transition focus:border-[#d35454] focus:ring-4 focus:ring-[#f8d7d7]"
+                required
+              >
+                <option value="">-- Pilih Kategori --</option>
+                {CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+
           </div>
 
           <label className="block space-y-2">
@@ -230,6 +274,7 @@ function HazardModal({ isOpen, form, onChange, onClose, onSubmit }) {
             >
               {form.id ? "Update Hazard Report" : "Simpan Hazard Report"}
             </button>
+          </div>
           </div>
         </form>
       </div>
@@ -308,10 +353,14 @@ function HazardDetailModal({ report, onClose }) {
 }
 
 export default function HazardPage() {
-  const [reports, setReports] = useState(initialHazardReports);
+  const [reports, setReports] = useState([]);
+  const [kapalOptions, setKapalOptions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [detailReport, setDetailReport] = useState(null);
+  const [attachmentSeedBaseTime] = useState(() => Date.now());
 
   const totalReport = reports.reduce((sum, item) => sum + Number(item.totalReport || 0), 0);
   const totalTarget = reports.reduce((sum, item) => sum + Number(item.target || 0), 0);
@@ -348,26 +397,37 @@ export default function HazardPage() {
           fileName: `Laporan Hazard ${item.kapal}`,
           mimeType: "application/pdf",
           previewUrl: `https://example.com/preview/hazard_report_${item.id}.pdf`,
-          uploadedAt: new Date(Date.now() - index * 3600 * 1000).toISOString(),
+          uploadedAt: new Date(attachmentSeedBaseTime - index * 3600 * 1000).toISOString(),
 
         }));
-      }, [reports]);
+      }, [attachmentSeedBaseTime, reports]);
   
   const handleEdit = (report) => {
-    setForm({
-      id: report.id,
-      kapal: report.kapal,
-      tanggal: report.tanggal,
-      target: report.target,
-      totalReport: report.totalReport,
-      keterangan: report.keterangan,
-    });
-    setIsModalOpen(true);
-  };
+  setForm({
+    id: report.id,
+    kapal_id: report.kapal_id || "",
+    kapal: report.kapal || "",
+    tanggal: report.tanggal || "",
+    target: report.target ?? "",
+    totalReport: report.totalReport ?? "",
+    keterangan: report.keterangan || "",
+  });
 
-  const handleDelete = (reportId) => {
-    setReports((current) => current.filter((item) => item.id !== reportId));
-  };
+  setIsModalOpen(true);
+};
+
+  const handleDelete = async (reportId) => {
+  const confirmed = window.confirm("Yakin ingin menghapus hazard report ini?");
+
+  if (!confirmed) return;
+
+  try {
+    await deleteHazardReport(reportId);
+    await loadHazardReports();
+  } catch (error) {
+    alert(error.message || "Gagal menghapus hazard report.");
+  }
+};
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
@@ -382,40 +442,52 @@ export default function HazardPage() {
     }));
   };
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+ const handleSubmit = async (event) => {
+  event.preventDefault();
 
+  try {
     if (form.id) {
-      setReports((current) =>
-        current.map((item) =>
-          item.id === form.id
-            ? {
-                ...item,
-                kapal: form.kapal,
-                tanggal: form.tanggal,
-                target: form.target,
-                totalReport: form.totalReport,
-                keterangan: form.keterangan,
-              }
-            : item
-        )
-      );
+      await updateHazardReport(form.id, form);
     } else {
-      setReports((current) => [
-        {
-          id: Date.now(),
-          kapal: form.kapal,
-          tanggal: form.tanggal,
-          target: form.target,
-          totalReport: form.totalReport,
-          keterangan: form.keterangan,
-        },
-        ...current,
-      ]);
+      await createHazardReport(form);
     }
+
+    await loadHazardReports();
+    handleCloseModal();
+  } catch (error) {
+    alert(error.message || "Gagal menyimpan hazard report.");
+  }
+};
 
     handleCloseModal();
   };
+  async function loadHazardReports() {
+  setLoading(true);
+  setErrorMessage("");
+
+  try {
+    const data = await getHazardReports();
+    setReports(data);
+  } catch (error) {
+    setErrorMessage(error.message || "Gagal mengambil data hazard report.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function loadKapalOptions() {
+  try {
+    const data = await getKapalOptions();
+    setKapalOptions(data);
+  } catch (error) {
+    console.error(error.message || "Gagal mengambil data kapal.");
+  }
+}
+
+useEffect(() => {
+  loadHazardReports();
+  loadKapalOptions();
+}, []);
 
   const summaryCards = [
     {
@@ -621,82 +693,39 @@ export default function HazardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {reports.map((item) => {
-                      const targetMet = Number(item.totalReport) >= Number(item.target);
-                      const difference = Number(item.totalReport) - Number(item.target);
+                    {loading ? (
+                      <tr>
+                        <td colSpan={9} className="px-3 py-10 text-center text-[13px] text-[#8b96a1]">
+                          Memuat data hazard report...
+                        </td>
+                      </tr>
+                    ) : errorMessage ? (
+                      <tr>
+                        <td colSpan={9} className="px-3 py-10 text-center text-[13px] text-[#c53030]">
+                          {errorMessage}
+                        </td>
+                      </tr>
+                    ) : reports.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-3 py-10 text-center text-[13px] text-[#8b96a1]">
+                          Belum ada data hazard report.
+                        </td>
+                      </tr>
+                    ) : (
+                      reports.map((item) => {
+                        const targetMet = Number(item.totalReport) >= Number(item.target);
+                        const difference = Number(item.totalReport) - Number(item.target);
 
-                      return (
-                        <tr
-                          key={item.id}
-                          className="border-b border-[#f0f3f5] transition-colors hover:bg-[#fafbfc]"
-                        >
-                          <td className="whitespace-nowrap px-3 py-3 font-medium text-[#243041]">
-                            {item.kapal}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
-                            {formatMonthYear(item.tanggal)}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#8b96a1]">
-                            {formatFullDate(item.tanggal)}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
-                            {item.target}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4a5568]">
-                            {item.totalReport}
-                          </td>
-                          <td
-                            className={`whitespace-nowrap px-3 py-3 font-semibold ${
-                              targetMet ? "text-[#1f8f4f]" : "text-[#d84f4f]"
-                            }`}
+                        return (
+                          <tr
+                            key={item.id}
+                            className="border-b border-[#f0f3f5] transition-colors hover:bg-[#fafbfc]"
                           >
-                            {difference}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3">
-                            <span
-                              className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                                targetMet
-                                  ? "bg-[#eaf8ef] text-[#1f8f4f]"
-                                  : "bg-[#fff1f1] text-[#d84f4f]"
-                              }`}
-                            >
-                              {targetMet ? "Target Tercapai" : "Perlu Follow Up"}
-                            </span>
-                          </td>
-                          <td className="max-w-[240px] px-3 py-3">
-                            <p className="line-clamp-2 text-[11px] leading-5 text-[#667481]">
-                              {item.keterangan}
-                            </p>
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3">
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setDetailReport(item)}
-                                className="inline-flex items-center gap-1 rounded-[6px] bg-[#f3f4f6] px-2.5 py-1 text-[10px] font-medium text-[#374151] transition hover:bg-[#e5e7eb]"
-                              >
-                                <Eye size={11} />
-                                Detail
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleEdit(item)}
-                                className="inline-flex items-center justify-center rounded-[6px] bg-[#eff6ff] px-2.5 py-1 text-[10px] font-medium text-[#1d4ed8] transition hover:bg-[#dbeafe]"
-                              >
-                                Ubah
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(item.id)}
-                                className="inline-flex items-center justify-center rounded-[6px] bg-[#fff0f0] px-2.5 py-1 text-[10px] font-medium text-[#c53030] transition hover:bg-[#fecaca]"
-                              >
-                                Hapus
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            {/* isi td kamu tetap sama */}
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -705,16 +734,17 @@ export default function HazardPage() {
         </section>
       </div>
 
-      <AttachmentModulePanel
-                      title="Attachment Incident"
-                      description="Panel ini tidak dipakai untuk upload. User upload file lewat halaman Attachment, lalu hasilnya otomatis tampil di sini kalau `record id` dan `module name` cocok."
-                      contexts={attachmentContexts}
-                      seedAttachments={attachmentSeed}
-                    />
+        <AttachmentModulePanel
+          title="Attachment Hazard Report"
+          description="Panel ini menampilkan attachment hazard report berdasarkan record id dan module name."
+          contexts={attachmentContexts}
+          seedAttachments={attachmentSeed}
+        />
 
       <HazardModal
         isOpen={isModalOpen}
         form={form}
+        kapalOptions={kapalOptions}
         onChange={handleChangeForm}
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
@@ -722,4 +752,4 @@ export default function HazardPage() {
       <HazardDetailModal report={detailReport} onClose={() => setDetailReport(null)} />
     </>
   );
-}
+

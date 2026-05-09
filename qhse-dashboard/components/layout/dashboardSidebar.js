@@ -1,10 +1,42 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChevronDown, ShieldCheck, UserCircle2, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { LogOut, ShieldCheck, UserCircle2, X } from "lucide-react";
+import Swal from "sweetalert2";
 import { dashboardMenuSections } from "@/lib/menu";
+import {
+  getCurrentUser,
+  getCurrentUserRole,
+  logoutUser,
+} from "@/lib/services/authService";
+
+function formatRole(role) {
+  if (!role) {
+    return "User";
+  }
+
+  const labels = {
+    superadmin: "Super Administrator",
+    admin: "Administrator",
+    viewer: "Viewer",
+  };
+
+  return labels[role] || role;
+}
+
+function getDisplayName(user) {
+  const metadata = user?.user_metadata || {};
+
+  return (
+    metadata.full_name ||
+    metadata.name ||
+    metadata.display_name ||
+    user?.email?.split("@")[0] ||
+    "User"
+  );
+}
 
 export default function DashboardSidebar({
   isDesktopSidebarOpen,
@@ -12,7 +44,70 @@ export default function DashboardSidebar({
   onMobileClose,
 }) {
   const pathname = usePathname();
-  const currentRole = "superadmin";
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentRole, setCurrentRole] = useState("viewer");
+
+  useEffect(() => {
+    async function loadLoggedInUser() {
+      try {
+        const [user, role] = await Promise.all([
+          getCurrentUser(),
+          getCurrentUserRole(),
+        ]);
+
+        setCurrentUser(user);
+        setCurrentRole(role || "viewer");
+      } catch {
+        setCurrentUser(null);
+        setCurrentRole("viewer");
+      }
+    }
+
+    loadLoggedInUser();
+  }, []);
+
+  const displayName = useMemo(() => getDisplayName(currentUser), [currentUser]);
+  const userInitial = displayName.charAt(0).toUpperCase();
+
+  async function handleLogout() {
+    const result = await Swal.fire({
+      title: "Anda yakin untuk keluar?",
+      text: "Sesi login akan diakhiri dan Anda akan kembali ke halaman login.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Ya, keluar",
+      cancelButtonText: "Batal",
+      reverseButtons: true,
+      confirmButtonColor: "#0f766e",
+      cancelButtonColor: "#64748b",
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    try {
+      await logoutUser();
+
+      await Swal.fire({
+        title: "Berhasil keluar",
+        text: "Anda akan diarahkan ke halaman login.",
+        icon: "success",
+        timer: 1200,
+        showConfirmButton: false,
+      });
+
+      router.replace("/login");
+    } catch (error) {
+      Swal.fire({
+        title: "Gagal keluar",
+        text: error.message || "Terjadi kendala saat mengakhiri sesi login.",
+        icon: "error",
+        confirmButtonColor: "#0f766e",
+      });
+    }
+  }
 
   return (
     <>
@@ -131,21 +226,34 @@ export default function DashboardSidebar({
           }`}
         >
           <div
-            className={`flex items-center rounded-xl gap-3 px-2 py-2 ${
+            className={`flex items-center gap-3 rounded-xl px-2 py-2 ${
               isDesktopSidebarOpen ? "lg:justify-start" : "lg:justify-center"
             }`}
           >
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/18 text-white">
-              <UserCircle2 size={22} />
+              {userInitial ? (
+                <span className="text-[14px] font-semibold">{userInitial}</span>
+              ) : (
+                <UserCircle2 size={22} />
+              )}
             </div>
             <div className={`min-w-0 flex-1 ${isDesktopSidebarOpen ? "lg:block" : "lg:hidden"}`}>
-              <p className="text-[14px] font-semibold">John Doe</p>
-              <p className="text-[12px] text-white/70">Super Administrator</p>
+              <p className="truncate text-[14px] font-semibold">{displayName}</p>
+              <p className="truncate text-[12px] text-white/70">
+                {formatRole(currentRole)}
+              </p>
             </div>
-            <ChevronDown
-              size={16}
-              className={`text-white/70 ${isDesktopSidebarOpen ? "lg:block" : "lg:hidden"}`}
-            />
+            <button
+              type="button"
+              onClick={handleLogout}
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition hover:bg-white/12 hover:text-white ${
+                isDesktopSidebarOpen ? "lg:flex" : "lg:hidden"
+              }`}
+              aria-label="Keluar"
+              title="Keluar"
+            >
+              <LogOut size={17} />
+            </button>
           </div>
         </div>
       </aside>

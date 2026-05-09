@@ -49,6 +49,8 @@
 }
 
 :root {
+  --font-roboto-sans: "Roboto", "Segoe UI", Arial, sans-serif;
+  --font-roboto-mono: "Roboto Mono", "Consolas", "Courier New", monospace;
   --font-sans: var(--font-roboto-sans);
   --background: #f6f7f8;
   --foreground: #243041;

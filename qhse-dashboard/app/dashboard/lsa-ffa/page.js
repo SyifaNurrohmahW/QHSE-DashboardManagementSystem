@@ -42,6 +42,8 @@ const EQUIPMENT_TYPES = [
   "SERT HRU LIFERAFT",
   "Co2 System",
   "SCBA/EEBD",
+  "Gas Detector",
+  "HRU EPIRB",
 ];
 
 const EQUIPMENT_DESCRIPTIONS = {
@@ -51,11 +53,14 @@ const EQUIPMENT_DESCRIPTIONS = {
   "SERT HRU LIFERAFT": "Hydrostatic Release Unit – Liferaft",
   "Co2 System": "Fixed CO₂ Fire Suppression System",
   "SCBA/EEBD": "Self-Contained Breathing Apparatus / Emergency Escape Breathing Device",
+  "Gas Detector": "Gas Detection System",
+  "HRU EPIRB": "Hydrostatic Release Unit – EPIRB",
 };
 
 const BULAN_OPTIONS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
 const STATUS_OPTIONS = ["Sudah","Belum","Expired","Perlu Perbaikan","Proses","NIL"];
+const RECORD_TYPES = ["LSA", "FFA"];
 
 // ─── Data Seed dari Excel LSA & FFA ──────────────────────────────────────────
 
@@ -75,9 +80,17 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function genId(items) {
-  const nums = items.map((i) => parseInt(i.id.split("-")[1] || 0));
-  return `LSA-${String(Math.max(0, ...nums) + 1).padStart(3, "0")}`;
+function genId(items, prefix = "LSA") {
+  const nums = items
+    .filter((i) => String(i.id || "").startsWith(`${prefix}-`))
+    .map((i) => parseInt(i.id.split("-")[1] || 0, 10))
+    .filter((n) => !Number.isNaN(n));
+  return `${prefix}-${String(Math.max(0, ...nums) + 1).padStart(3, "0")}`;
+}
+
+function getRecordTypeFromId(id) {
+  const prefix = String(id || "").split("-")[0];
+  return RECORD_TYPES.includes(prefix) ? prefix : "LSA";
 }
 
 function alertLabel(days) {
@@ -144,12 +157,16 @@ function FormField({ label, req, error, children }) {
 // ─── Form Modal ───────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
-  id: "", kapal: "", equipment: "", qty: "", lastDate: "",
+  id: "", recordType: "LSA", kapal: "", equipment: "", qty: "", lastDate: "",
   nextDate: "", bulanExp: "", alertDays: "", status: "", keterangan: "",
 };
 
-function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
-  const [form, setForm] = useState(initialData || { ...EMPTY_FORM, id: nextId });
+function FormModal({ isOpen, onClose, onSave, initialData, getNextId, isEdit }) {
+  const [form, setForm] = useState(
+    initialData
+      ? { ...EMPTY_FORM, ...initialData, recordType: getRecordTypeFromId(initialData.id) }
+      : { ...EMPTY_FORM, id: getNextId("LSA"), recordType: "LSA" }
+  );
   const [errors, setErrors] = useState({});
 
   if (!isOpen) return null;
@@ -164,12 +181,18 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
       errors[k] ? "border-[#c53030]" : "border-[#dde4ea]"
     }`;
 
+  const previewId = isEdit
+    ? `${form.recordType}-${String(form.id || "").split("-")[1] || "001"}`
+    : getNextId(form.recordType);
+
   function handleSave() {
-    const req = ["kapal", "equipment", "status"];
+    const req = ["recordType", "kapal", "equipment", "status"];
     const errs = {};
     req.forEach((k) => { if (!String(form[k] || "").trim()) errs[k] = true; });
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    onSave({ ...form, id: form.id || nextId });
+    const restForm = { ...form };
+    delete restForm.recordType;
+    onSave({ ...restForm, id: previewId });
   }
 
   return (
@@ -201,8 +224,11 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
 
         {/* Body */}
         <div className="grid grid-cols-2 gap-3 px-6 py-5">
-          <FormField label="ID Record" error={errors.id}>
-            <input className={`${inputCls("id")} bg-[#f8fafc] text-[#8a95a2]`} value={form.id || nextId} readOnly />
+          <FormField label="ID Record" req error={errors.recordType}>
+            <select className={inputCls("recordType")} value={form.recordType} onChange={set("recordType")}>
+              <option value="">-- Pilih Tipe Record --</option>
+              {RECORD_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
           </FormField>
 
           <FormField label="Kapal" req error={errors.kapal}>
@@ -211,6 +237,13 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
               {VESSELS.map((v) => <option key={v}>{v}</option>)}
             </select>
           </FormField>
+
+          <div className="col-span-2">
+            <div className="rounded-[10px] border border-[#e5edf3] bg-[#f8fafc] px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#7b8794]">Nomor Record</p>
+              <p className="mt-1 text-[13px] font-semibold text-[#1f2b38]">{previewId}</p>
+            </div>
+          </div>
 
           <div className="col-span-2">
             <FormField label="Jenis Equipment" req error={errors.equipment}>
@@ -413,11 +446,11 @@ export default function LsaFfaPage() {
       .slice(0, 6);
   }, [data]);
 
-  const nextId = useMemo(() => genId(data), [data]);
+  const getNextId = (prefix) => genId(data, prefix);
 
   function handleSave(item) {
     if (editItem) {
-      setData((prev) => prev.map((d) => (d.id === item.id ? item : d)));
+      setData((prev) => prev.map((d) => (d.id === editItem.id ? item : d)));
     } else {
       setData((prev) => [item, ...prev]);
     }
@@ -736,7 +769,7 @@ export default function LsaFfaPage() {
         onClose={() => { setModalOpen(false); setEditItem(null); }}
         onSave={handleSave}
         initialData={editItem}
-        nextId={nextId}
+        getNextId={getNextId}
         isEdit={!!editItem}
       />
       <DetailModal item={detailItem} onClose={() => setDetailItem(null)} />

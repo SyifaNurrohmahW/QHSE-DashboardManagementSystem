@@ -260,15 +260,15 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
             </select>
           </FormField>
 
-          <FormField label="No Urut" required error={errors.noUrut}>
-            <input
-              type="number"
-              className={inputClass("noUrut")}
-              value={form.noUrut}
-              onChange={updateField("noUrut")}
-              placeholder="Contoh: 1"
-            />
-          </FormField>
+           <FormField label="Lokasi" required error={errors.lokasi}>
+              <textarea
+                rows={4}
+                className={`${inputClass("lokasi")} resize-none`}
+                value={form.lokasi}
+                onChange={updateField("lokasi")}
+                placeholder="Tuliskan lokasi kejadian temuan misal: 'Ruang Panel Utama'"
+              />
+            </FormField>
 
           <FormField label="Tanggal" required error={errors.tanggal}>
             <input type="date" className={inputClass("tanggal")} value={form.tanggal} onChange={updateField("tanggal")} />

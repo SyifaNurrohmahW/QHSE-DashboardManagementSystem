@@ -29,7 +29,7 @@ const MONTHS = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
-const REPORT_TYPES = ["STF", "VIR"];
+const REPORT_TYPES = ["STF & VIR", "Management Visit"];
 
 const INITIAL_DATA = [
   {
@@ -37,7 +37,7 @@ const INITIAL_DATA = [
     kapal: "MV Adaro Pioneer",
     tahun: 2026,
     bulan: "Januari",
-    tipeReport: "STF",
+    tipeReport: "STF & VIR",
     target: 2,
     total: 2,
     keterangan: "Target safety tour finding tercapai.",
@@ -47,7 +47,7 @@ const INITIAL_DATA = [
     kapal: "MV South Borneo",
     tahun: 2026,
     bulan: "Januari",
-    tipeReport: "VIR",
+    tipeReport: "Management Visit",
     target: 1,
     total: 0,
     keterangan: "VIR belum dilakukan bulan ini.",
@@ -90,7 +90,7 @@ function FormField({ label, req, error, children }) {
 
 function TypeBadge({ type }) {
   const style =
-    type === "STF"
+    type === "STF & VIR"
       ? "bg-emerald-50 text-emerald-700"
       : "bg-blue-50 text-blue-700";
 
@@ -398,8 +398,8 @@ export default function StfVirPage() {
     [data]
   );
 
-  const totalStf = data.filter((item) => item.tipeReport === "STF").length;
-  const totalVir = data.filter((item) => item.tipeReport === "VIR").length;
+  const totalStfVir = data.filter((item) => item.tipeReport === "STF & VIR").length;
+  const totalManagementVisit = data.filter((item) => item.tipeReport === "Management Visit").length;
   const achievementTotal = achievement(totalActual, totalTarget);
 
   const stats = [
@@ -427,7 +427,7 @@ export default function StfVirPage() {
     {
       title: "Total Record",
       value: String(data.length).padStart(2, "0"),
-      note: `${totalStf} STF • ${totalVir} VIR`,
+      note: `${totalStfVir} STF & VIR • ${totalManagementVisit} Management Visit`,
       icon: FileText,
       tone: "bg-slate-100 text-slate-700",
     },
@@ -512,7 +512,7 @@ export default function StfVirPage() {
             <p className="text-[12px] text-white/70">Report Type</p>
             <div className="mt-2 flex items-center gap-2">
               <Ship size={18} className="text-white" />
-              <span className="text-[20px] font-bold">STF / VIR</span>
+              <span className="text-[20px] font-bold">STF & VIR</span>
             </div>
           </div>
         </div>
