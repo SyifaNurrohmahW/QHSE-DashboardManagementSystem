@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -20,89 +20,39 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import AttachmentModulePanel from "@/components/dashboard/attachment-module-panel";
 import { Card, CardContent } from "@/components/ui/card";
+import { getKapalOptions } from "@/lib/services/kapalService";
+import {
+  createSecurityRecord,
+  deleteSecurityRecord,
+  getSecurityRecords,
+  updateSecurityRecord,
+} from "@/lib/services/securityService";
 
-const VESSELS = [
-  "MBP 121", "MBP 122", "MBP 123", "MBP 125", "MBP 126", "MBP 128",
-  "MBP 129", "MBP 130", "MBP 131", "MBP 132", "MBP 133", "MBP 135",
-  "MBP 136", "MBP 138", "MBP 139", "MBP 140", "MBP 141", "MBP 142",
-  "MBP 143", "MBP 145", "MBP 146", "MBP 148", "MBP 160", "MBP 161",
-  "MBP 162", "MBP 3215",
-];
+const MONTH_OPTIONS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-const MONTH_OPTIONS = [
-  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
-];
-
-const STATUS_OPTIONS = ["Open", "On Progress", "Closed"];
-
-const INITIAL_DATA = [
-  {
-    id: "SEC-001",
-    kapal: "MBP 121",
-    tahun: 2026,
-    bulan: "APR",
-    noUrut: 1,
-    tanggal: "2026-04-08",
-    deskripsi: "Pemeriksaan area access control menemukan pintu ruang panel belum terkunci sempurna.",
-    keterangan: "Perlu pengecekan ulang oleh PIC vessel.",
-    status: "Open",
-  },
-  {
-    id: "SEC-002",
-    kapal: "MBP 122",
-    tahun: 2026,
-    bulan: "APR",
-    noUrut: 2,
-    tanggal: "2026-04-12",
-    deskripsi: "Temuan CCTV di main deck sisi kanan tidak merekam secara stabil saat malam hari.",
-    keterangan: "Penggantian unit kamera sedang diproses.",
-    status: "On Progress",
-  },
-  {
-    id: "SEC-003",
-    kapal: "MBP 121",
-    tahun: 2026,
-    bulan: "MAR",
-    noUrut: 3,
-    tanggal: "2026-03-22",
-    deskripsi: "Security briefing pergantian watch belum terdokumentasi dalam log harian.",
-    keterangan: "Sudah ditambahkan ke checklist watch handover.",
-    status: "Closed",
-  },
-  {
-    id: "SEC-004",
-    kapal: "MBP 139",
-    tahun: 2026,
-    bulan: "APR",
-    noUrut: 4,
-    tanggal: "2026-04-19",
-    deskripsi: "Lampu penerangan jalur muster station bagian belakang redup dan mengganggu visibilitas patroli malam.",
-    keterangan: "Menunggu material pengganti dari gudang.",
-    status: "On Progress",
-  },
-  {
-    id: "SEC-005",
-    kapal: "MBP 148",
-    tahun: 2026,
-    bulan: "FEB",
-    noUrut: 5,
-    tanggal: "2026-02-14",
-    deskripsi: "Akses kunci ruang radio sempat tidak tercatat di buku serah terima.",
-    keterangan: "PIC sudah briefing ulang seluruh watchkeeper.",
-    status: "Closed",
-  },
+const STATUS_OPTIONS = [
+  { label: "Open", value: "open" },
+  { label: "On Progress", value: "on_progress" },
+  { label: "Closed", value: "closed" },
 ];
 
 const STATUS_STYLE = {
-  Open: "bg-[#fff4e5] text-[#b26a00]",
-  "On Progress": "bg-[#eef4ff] text-[#376ad6]",
-  Closed: "bg-[#edf9f1] text-[#1f9b58]",
+  open: "bg-[#fff4e5] text-[#b26a00]",
+  on_progress: "bg-[#eef4ff] text-[#376ad6]",
+  closed: "bg-[#edf9f1] text-[#1f9b58]",
+};
+
+const STATUS_LABEL = {
+  open: "Open",
+  on_progress: "On Progress",
+  closed: "Closed",
 };
 
 const EMPTY_FORM = {
   id: "",
+  kapal_id: "",
   kapal: "",
   tahun: "",
   bulan: "",
@@ -110,7 +60,7 @@ const EMPTY_FORM = {
   tanggal: "",
   deskripsi: "",
   keterangan: "",
-  status: "",
+  status: "open",
 };
 
 function formatDate(value) {
@@ -122,22 +72,10 @@ function formatDate(value) {
   });
 }
 
-function generateId(items) {
-  const next = items.reduce((max, item) => {
-    const current = Number(item.id.split("-")[1] || 0);
-    return Math.max(max, current);
-  }, 0);
-  return `SEC-${String(next + 1).padStart(3, "0")}`;
-}
-
 function Pill({ label }) {
   return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-        STATUS_STYLE[label] || "bg-[#edf1f4] text-[#55616d]"
-      }`}
-    >
-      {label}
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${STATUS_STYLE[label] || "bg-[#edf1f4] text-[#55616d]"}`}>
+      {STATUS_LABEL[label] || label || "-"}
     </span>
   );
 }
@@ -154,8 +92,8 @@ function FormField({ label, required, error, children }) {
   );
 }
 
-function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
-  const [form, setForm] = useState(initialData || { ...EMPTY_FORM, id: nextId });
+function FormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOptions, isSaving }) {
+  const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
   if (!isOpen) return null;
@@ -171,8 +109,19 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
     setErrors((current) => ({ ...current, [key]: false }));
   };
 
+  const updateKapal = (event) => {
+    const kapalId = event.target.value;
+    const selected = kapalOptions.find((item) => String(item.value) === kapalId);
+    setForm((current) => ({
+      ...current,
+      kapal_id: kapalId,
+      kapal: selected?.nama_kapal || "",
+    }));
+    setErrors((current) => ({ ...current, kapal_id: false }));
+  };
+
   function handleSubmit() {
-    const requiredFields = ["kapal", "tahun", "bulan", "noUrut", "tanggal", "deskripsi", "status"];
+    const requiredFields = ["kapal_id", "tahun", "bulan", "noUrut", "tanggal", "deskripsi", "status"];
     const nextErrors = {};
 
     requiredFields.forEach((field) => {
@@ -186,7 +135,6 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
 
     onSave({
       ...form,
-      id: form.id || nextId,
       tahun: Number(form.tahun),
       noUrut: Number(form.noUrut),
     });
@@ -196,7 +144,7 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-3 py-6"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !isSaving) onClose();
       }}
     >
       <div className="w-full max-w-[720px] overflow-hidden rounded-[24px] border border-[#e3e8ed] bg-white shadow-[0_28px_60px_rgba(15,23,42,0.24)]">
@@ -207,16 +155,14 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
                 <Shield size={14} />
                 Security Record
               </div>
-              <h2 className="mt-3 text-[22px] font-bold text-[#1f2b38]">
-                {isEdit ? "Edit Security Record" : "Tambah Security Record"}
-              </h2>
-              <p className="mt-1 text-[13px] text-[#6f7c89]">
-                Form disesuaikan dengan field register security record per kapal.
-              </p>
+              <h2 className="mt-3 text-[22px] font-bold text-[#1f2b38]">{isEdit ? "Edit Security Record" : "Tambah Security Record"}</h2>
+              <p className="mt-1 text-[13px] text-[#6f7c89]">Data akan disimpan ke Database</p>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#6e7b87] shadow-sm hover:bg-[#f4f7f9]"
+              disabled={isSaving}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#6e7b87] shadow-sm hover:bg-[#f4f7f9] disabled:opacity-60"
             >
               <X size={18} />
             </button>
@@ -224,29 +170,19 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
         </div>
 
         <div className="grid gap-4 px-6 py-5 md:grid-cols-2">
-          <FormField label="ID Record">
-            <input className={`${inputClass("id")} bg-[#f5f7fa] text-[#8b96a1]`} value={form.id || nextId} readOnly />
-          </FormField>
-
-          <FormField label="Kapal" required error={errors.kapal}>
-            <select className={inputClass("kapal")} value={form.kapal} onChange={updateField("kapal")}>
+          <FormField label="Kapal" required error={errors.kapal_id}>
+            <select className={inputClass("kapal_id")} value={form.kapal_id || ""} onChange={updateKapal}>
               <option value="">Pilih kapal</option>
-              {VESSELS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {kapalOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>
           </FormField>
 
           <FormField label="Tahun" required error={errors.tahun}>
-            <input
-              type="number"
-              className={inputClass("tahun")}
-              value={form.tahun}
-              onChange={updateField("tahun")}
-              placeholder="Contoh: 2026"
-            />
+            <input type="number" className={inputClass("tahun")} value={form.tahun} onChange={updateField("tahun")} placeholder="Contoh: 2026" />
           </FormField>
 
           <FormField label="Bulan" required error={errors.bulan}>
@@ -260,15 +196,9 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
             </select>
           </FormField>
 
-           <FormField label="Lokasi" required error={errors.lokasi}>
-              <textarea
-                rows={4}
-                className={`${inputClass("lokasi")} resize-none`}
-                value={form.lokasi}
-                onChange={updateField("lokasi")}
-                placeholder="Tuliskan lokasi kejadian temuan misal: 'Ruang Panel Utama'"
-              />
-            </FormField>
+          <FormField label="No Urut" required error={errors.noUrut}>
+            <input type="number" min="1" className={inputClass("noUrut")} value={form.noUrut} onChange={updateField("noUrut")} placeholder="Contoh: 1" />
+          </FormField>
 
           <FormField label="Tanggal" required error={errors.tanggal}>
             <input type="date" className={inputClass("tanggal")} value={form.tanggal} onChange={updateField("tanggal")} />
@@ -278,8 +208,8 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
             <select className={inputClass("status")} value={form.status} onChange={updateField("status")}>
               <option value="">Pilih status</option>
               {STATUS_OPTIONS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>
@@ -310,21 +240,23 @@ function FormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
         </div>
 
         <div className="flex flex-col gap-3 border-t border-[#edf1f4] bg-[#fbfcfd] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[12px] text-[#7a8793]">
-            Simpan akan langsung memperbarui register security record pada halaman ini.
-          </p>
+          <p className="text-[12px] text-[#7a8793]">Simpan akan langsung memperbarui data di daftar security record.</p>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={onClose}
-              className="rounded-[12px] bg-[#eef2f5] px-4 py-2.5 text-[13px] font-semibold text-[#5a6672] hover:bg-[#e6ebef]"
+              disabled={isSaving}
+              className="rounded-[12px] bg-[#eef2f5] px-4 py-2.5 text-[13px] font-semibold text-[#5a6672] hover:bg-[#e6ebef] disabled:opacity-60"
             >
               Batal
             </button>
             <button
+              type="button"
               onClick={handleSubmit}
-              className="rounded-[12px] bg-[#15803d] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#126c33]"
+              disabled={isSaving}
+              className="rounded-[12px] bg-[#15803d] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#126c33] disabled:opacity-70"
             >
-              {isEdit ? "Simpan Perubahan" : "Tambah Record"}
+              {isSaving ? "Menyimpan..." : isEdit ? "Simpan Perubahan" : "Tambah Record"}
             </button>
           </div>
         </div>
@@ -352,18 +284,13 @@ function DetailModal({ item, onClose }) {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-[680px] flex-col overflow-hidden rounded-[24px] border border-[#e3e8ed] bg-white shadow-[0_28px_60px_rgba(15,23,42,0.24)] sm:max-h-[calc(100vh-3rem)]">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-[680px] flex-col overflow-hidden rounded-[24px] border border-[#e3e8ed] bg-white shadow-[0_28px_60px_rgba(15,23,42,0.24)]">
         <div className="flex items-start justify-between border-b border-[#edf1f4] px-6 py-5">
           <div>
-            <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[#1f9b58]">
-              Detail Security Record
-            </p>
+            <p className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[#1f9b58]">Detail Security Record</p>
             <h2 className="mt-2 text-[22px] font-bold text-[#1f2b38]">{item.kapal}</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f4f7f9] text-[#6e7b87] hover:bg-[#e8edf2]"
-          >
+          <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f4f7f9] text-[#6e7b87] hover:bg-[#e8edf2]">
             <X size={18} />
           </button>
         </div>
@@ -376,25 +303,19 @@ function DetailModal({ item, onClose }) {
           <div className="grid gap-3 md:grid-cols-2">
             {details.map((row) => (
               <div key={row.label} className="rounded-[14px] border border-[#edf1f4] bg-[#fafbfd] px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">
-                  {row.label}
-                </p>
-                <p className="mt-1 text-[14px] font-medium text-[#263240]">{row.value}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">{row.label}</p>
+                <p className="mt-1 text-[14px] font-medium text-[#263240]">{row.value || "-"}</p>
               </div>
             ))}
           </div>
 
           <div className="rounded-[16px] border border-[#edf1f4] bg-white px-4 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">
-              Deskripsi
-            </p>
-            <p className="mt-2 text-[14px] leading-6 text-[#4f5b67]">{item.deskripsi}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">Deskripsi</p>
+            <p className="mt-2 text-[14px] leading-6 text-[#4f5b67]">{item.deskripsi || "-"}</p>
           </div>
 
           <div className="rounded-[16px] border border-[#edf1f4] bg-white px-4 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">
-              Keterangan
-            </p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">Keterangan</p>
             <p className="mt-2 text-[14px] leading-6 text-[#4f5b67]">{item.keterangan || "-"}</p>
           </div>
         </div>
@@ -403,14 +324,14 @@ function DetailModal({ item, onClose }) {
   );
 }
 
-function ConfirmModal({ itemId, isOpen, onCancel, onConfirm }) {
+function ConfirmModal({ itemId, isOpen, onCancel, onConfirm, isDeleting }) {
   if (!isOpen) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-3"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onCancel();
+        if (event.target === event.currentTarget && !isDeleting) onCancel();
       }}
     >
       <div className="w-full max-w-[380px] rounded-[22px] border border-[#e3e8ed] bg-white p-6 text-center shadow-[0_28px_60px_rgba(15,23,42,0.24)]">
@@ -419,20 +340,24 @@ function ConfirmModal({ itemId, isOpen, onCancel, onConfirm }) {
         </div>
         <h3 className="mt-4 text-[18px] font-bold text-[#1f2b38]">Hapus record ini?</h3>
         <p className="mt-2 text-[13px] leading-6 text-[#6e7b87]">
-          Data dummy <span className="font-semibold text-[#25313f]">{itemId}</span> akan dihapus dari register halaman ini.
+          Data <span className="font-semibold text-[#25313f]">{itemId}</span> akan dihapus dari Supabase.
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <button
+            type="button"
             onClick={onCancel}
-            className="rounded-[12px] bg-[#eef2f5] px-4 py-2.5 text-[13px] font-semibold text-[#5a6672] hover:bg-[#e6ebef]"
+            disabled={isDeleting}
+            className="rounded-[12px] bg-[#eef2f5] px-4 py-2.5 text-[13px] font-semibold text-[#5a6672] hover:bg-[#e6ebef] disabled:opacity-60"
           >
             Batal
           </button>
           <button
+            type="button"
             onClick={onConfirm}
-            className="rounded-[12px] bg-[#c53030] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#af2a2a]"
+            disabled={isDeleting}
+            className="rounded-[12px] bg-[#c53030] px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-[#af2a2a] disabled:opacity-70"
           >
-            Ya, hapus
+            {isDeleting ? "Menghapus..." : "Ya, hapus"}
           </button>
         </div>
       </div>
@@ -440,8 +365,13 @@ function ConfirmModal({ itemId, isOpen, onCancel, onConfirm }) {
   );
 }
 
-export default function LsaFfaPage() {
-  const [data, setData] = useState(INITIAL_DATA);
+export default function SecurityPage() {
+  const [data, setData] = useState([]);
+  const [kapalOptions, setKapalOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
   const [kapalFilter, setKapalFilter] = useState("Semua");
   const [statusFilter, setStatusFilter] = useState("Semua");
@@ -451,12 +381,47 @@ export default function LsaFfaPage() {
   const [detailItem, setDetailItem] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getSecurityRecords()
+      .then((result) => {
+        if (!isMounted) return;
+        setData(result);
+        setErrorMessage("");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil security record.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    getKapalOptions()
+      .then((result) => {
+        if (!isMounted) return;
+        setKapalOptions(result);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil data kapal.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const kapalFilterOptions = useMemo(() => [...new Set(data.map((item) => item.kapal).filter(Boolean))], [data]);
+
   const stats = useMemo(() => {
     const total = data.length;
-    const totalKapal = new Set(data.map((item) => item.kapal)).size;
-    const open = data.filter((item) => item.status === "Open").length;
-    const progress = data.filter((item) => item.status === "On Progress").length;
-    const closed = data.filter((item) => item.status === "Closed").length;
+    const totalKapal = new Set(data.map((item) => item.kapal).filter(Boolean)).size;
+    const open = data.filter((item) => item.status === "open").length;
+    const progress = data.filter((item) => item.status === "on_progress").length;
+    const closed = data.filter((item) => item.status === "closed").length;
 
     return { total, totalKapal, open, progress, closed };
   }, [data]);
@@ -467,35 +432,35 @@ export default function LsaFfaPage() {
       return {
         month,
         total: items.length,
-        open: items.filter((item) => item.status === "Open").length,
-        progress: items.filter((item) => item.status === "On Progress").length,
-        closed: items.filter((item) => item.status === "Closed").length,
+        open: items.filter((item) => item.status === "open").length,
+        progress: items.filter((item) => item.status === "on_progress").length,
+        closed: items.filter((item) => item.status === "closed").length,
       };
     }).filter((item) => item.total > 0);
   }, [data]);
 
   const vesselSummary = useMemo(() => {
-    return VESSELS.filter((vessel) => data.some((item) => item.kapal === vessel)).map((vessel) => {
+    return kapalFilterOptions.map((vessel) => {
       const items = data.filter((item) => item.kapal === vessel);
       return {
         vessel,
         total: items.length,
-        open: items.filter((item) => item.status === "Open").length,
-        progress: items.filter((item) => item.status === "On Progress").length,
-        closed: items.filter((item) => item.status === "Closed").length,
+        open: items.filter((item) => item.status === "open").length,
+        progress: items.filter((item) => item.status === "on_progress").length,
+        closed: items.filter((item) => item.status === "closed").length,
       };
     });
-  }, [data]);
+  }, [data, kapalFilterOptions]);
 
   const filtered = useMemo(() => {
     return data.filter((item) => {
       const keyword = search.toLowerCase();
       const matchSearch =
         !keyword ||
-        item.id.toLowerCase().includes(keyword) ||
-        item.kapal.toLowerCase().includes(keyword) ||
+        String(item.id).toLowerCase().includes(keyword) ||
+        String(item.kapal).toLowerCase().includes(keyword) ||
         String(item.tahun).includes(keyword) ||
-        item.deskripsi.toLowerCase().includes(keyword) ||
+        String(item.deskripsi).toLowerCase().includes(keyword) ||
         String(item.noUrut).includes(keyword);
 
       const matchKapal = kapalFilter === "Semua" || item.kapal === kapalFilter;
@@ -508,26 +473,51 @@ export default function LsaFfaPage() {
 
   const focusItems = useMemo(() => {
     return [...data]
-      .filter((item) => item.status !== "Closed")
+      .filter((item) => item.status !== "closed")
       .sort((left, right) => new Date(right.tanggal) - new Date(left.tanggal))
       .slice(0, 5);
   }, [data]);
 
-  const nextId = useMemo(() => generateId(data), [data]);
+  const attachmentContexts = useMemo(() => {
+    return data.map((item) => ({
+      moduleName: "security_record",
+      recordId: String(item.id),
+      uploadedBy: item.kapal,
+    }));
+  }, [data]);
 
-  function handleSave(item) {
-    if (editItem) {
-      setData((current) => current.map((entry) => (entry.id === item.id ? item : entry)));
-    } else {
-      setData((current) => [item, ...current]);
+  async function handleSave(item) {
+    try {
+      setIsSaving(true);
+      setErrorMessage("");
+      if (editItem) {
+        const updated = await updateSecurityRecord(editItem.id, item);
+        setData((current) => current.map((entry) => (entry.id === editItem.id ? updated : entry)));
+      } else {
+        const created = await createSecurityRecord(item);
+        setData((current) => [created, ...current]);
+      }
+      setModalOpen(false);
+      setEditItem(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menyimpan security record.");
+    } finally {
+      setIsSaving(false);
     }
-    setModalOpen(false);
-    setEditItem(null);
   }
 
-  function handleDelete() {
-    setData((current) => current.filter((item) => item.id !== deleteId));
-    setDeleteId(null);
+  async function handleDelete() {
+    try {
+      setIsDeleting(true);
+      setErrorMessage("");
+      await deleteSecurityRecord(deleteId);
+      setData((current) => current.filter((item) => item.id !== deleteId));
+      setDeleteId(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menghapus security record.");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (
@@ -539,15 +529,14 @@ export default function LsaFfaPage() {
               <Shield size={13} />
               Security Record
             </div>
-            <h1 className="mt-3 text-[22px] font-bold leading-snug">
-              Security Record Register
-            </h1>
+            <h1 className="mt-3 text-[22px] font-bold leading-snug">Security Record Register</h1>
             <p className="mt-2 max-w-2xl text-[13px] leading-6 text-white/82">
-              Monitor catatan keamanan per kapal berdasarkan tahun, bulan, tanggal kejadian, dan status tindak lanjut.
+              Monitor catatan keamanan per kapal berdasarkan data dari Supabase.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <button
+              type="button"
               onClick={() => {
                 setEditItem(null);
                 setModalOpen(true);
@@ -557,7 +546,7 @@ export default function LsaFfaPage() {
               <Plus size={15} />
               Tambah Data
             </button>
-            <button className="inline-flex items-center gap-2 rounded-[10px] border border-white/25 px-4 py-2.5 text-[13px] font-semibold text-white">
+            <button type="button" className="inline-flex items-center gap-2 rounded-[10px] border border-white/25 px-4 py-2.5 text-[13px] font-semibold text-white">
               <FileDown size={15} />
               Export
             </button>
@@ -566,7 +555,7 @@ export default function LsaFfaPage() {
 
         <div className="grid border-t border-white/10 bg-white/10 sm:grid-cols-4">
           {[
-            { label: "Total Kapal", value: stats.totalKapal, note: "kapal dengan record aktif" },
+            { label: "Total Kapal", value: stats.totalKapal, note: "kapal dengan record" },
             { label: "Total Record", value: stats.total, note: "data security terdaftar" },
             { label: "Open", value: stats.open, note: "butuh tindak lanjut awal" },
             { label: "Closed", value: stats.closed, note: "record sudah selesai" },
@@ -594,9 +583,7 @@ export default function LsaFfaPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[13px] font-medium text-[#536070]">{item.title}</p>
-                    <p className="mt-2 text-[26px] font-bold leading-none text-[#1f2b38]">
-                      {String(item.value).padStart(2, "0")}
-                    </p>
+                    <p className="mt-2 text-[26px] font-bold leading-none text-[#1f2b38]">{String(item.value).padStart(2, "0")}</p>
                     <p className="mt-2 text-[11px] text-[#7c8793]">{item.note}</p>
                   </div>
                   <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${item.bg} ${item.color}`}>
@@ -609,31 +596,39 @@ export default function LsaFfaPage() {
         })}
       </section>
 
+      {errorMessage ? (
+        <div className="rounded-[16px] border border-[#ffd7d7] bg-[#fff7f7] px-4 py-3 text-[13px] font-medium text-[#b42318]">
+          {errorMessage}
+        </div>
+      ) : null}
+
       <section>
         <h2 className="mb-3 text-[15px] font-semibold text-[#243041]">Ringkasan per Bulan</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {monthlySummary.map((item) => (
-            <Card key={item.month} className="border-[#edf2f7]">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#f0fdf8] text-[#15803d]">
-                    <ClipboardList size={18} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-[#1f2b38]">{item.month}</p>
-                    <p className="mt-0.5 text-[11px] text-[#8b96a1] leading-snug">
-                      {item.total} record terinput di bulan ini
-                    </p>
-                    <div className="mt-2 flex items-center gap-3 text-[11px]">
-                      <span className="text-[#b26a00]">{item.open} open</span>
-                      <span className="text-[#376ad6]">{item.progress} progress</span>
-                      <span className="text-[#15803d]">{item.closed} closed</span>
+          {monthlySummary.length ? (
+            monthlySummary.map((item) => (
+              <Card key={item.month} className="border-[#edf2f7]">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#f0fdf8] text-[#15803d]">
+                      <ClipboardList size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-[#1f2b38]">{item.month}</p>
+                      <p className="mt-0.5 text-[11px] text-[#8b96a1] leading-snug">{item.total} record terinput di bulan ini</p>
+                      <div className="mt-2 flex items-center gap-3 text-[11px]">
+                        <span className="text-[#b26a00]">{item.open} open</span>
+                        <span className="text-[#376ad6]">{item.progress} progress</span>
+                        <span className="text-[#15803d]">{item.closed} closed</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <p className="text-[12px] text-[#8b96a1]">Belum ada data bulanan.</p>
+          )}
         </div>
       </section>
 
@@ -644,9 +639,7 @@ export default function LsaFfaPage() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-[16px] font-semibold text-[#1f2b38]">Register Security Record</h2>
-                  <p className="mt-1 text-[12px] text-[#7c8793]">
-                    Menampilkan {filtered.length} dari {data.length} record
-                  </p>
+                  <p className="mt-1 text-[12px] text-[#7c8793]">Menampilkan {filtered.length} dari {data.length} record</p>
                 </div>
 
                 <div className="relative w-full lg:w-[280px]">
@@ -668,8 +661,10 @@ export default function LsaFfaPage() {
                     className="appearance-none rounded-full border border-[#dde4ea] bg-white py-1.5 pl-3 pr-7 text-[11px] font-medium text-[#536070] focus:outline-none"
                   >
                     <option>Semua</option>
-                    {VESSELS.map((item) => (
-                      <option key={item}>{item}</option>
+                    {kapalFilterOptions.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
                     ))}
                   </select>
                   <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#8b96a1]" />
@@ -690,23 +685,23 @@ export default function LsaFfaPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {["Semua", ...STATUS_OPTIONS].map((item) => (
+                  {[{ label: "Semua", value: "Semua" }, ...STATUS_OPTIONS].map((item) => (
                     <button
-                      key={item}
-                      onClick={() => setStatusFilter(item)}
+                      key={item.value}
+                      type="button"
+                      onClick={() => setStatusFilter(item.value)}
                       className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
-                        statusFilter === item
-                          ? "bg-[#15803d] text-white"
-                          : "bg-[#f4f7f9] text-[#6b7a87] hover:bg-[#e8edf2]"
+                        statusFilter === item.value ? "bg-[#15803d] text-white" : "bg-[#f4f7f9] text-[#6b7a87] hover:bg-[#e8edf2]"
                       }`}
                     >
-                      {item}
+                      {item.label}
                     </button>
                   ))}
                 </div>
 
                 {(search || kapalFilter !== "Semua" || statusFilter !== "Semua" || bulanFilter !== "Semua") && (
                   <button
+                    type="button"
                     onClick={() => {
                       setSearch("");
                       setKapalFilter("Semua");
@@ -726,54 +721,49 @@ export default function LsaFfaPage() {
               <table className="w-full border-collapse text-[12px]">
                 <thead>
                   <tr className="sticky top-0 z-10 bg-[#f8fafb]">
-                    {["ID", "Kapal", "Tahun", "Bulan", "No Urut", "Tanggal", "Deskripsi", "Keterangan", "Status", "Aksi"].map((head) => (
-                      <th
-                        key={head}
-                        className="border-b border-[#edf2f7] px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#8b96a1] whitespace-nowrap"
-                      >
+                    {["ID", "No Urut", "Kapal", "Tanggal", "Tahun", "Bulan", "Deskripsi", "Keterangan", "Status", "Aksi"].map((head) => (
+                      <th key={head} className="whitespace-nowrap border-b border-[#edf2f7] px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#8b96a1]">
                         {head}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length === 0 ? (
+                  {loading ? (
                     <tr>
-                      <td colSpan={10} className="py-14 text-center text-[13px] text-[#8b96a1]">
-                        Tidak ada data yang cocok
-                      </td>
+                      <td colSpan={10} className="py-14 text-center text-[13px] text-[#8b96a1]">Memuat security record...</td>
+                    </tr>
+                  ) : filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="py-14 text-center text-[13px] text-[#8b96a1]">Tidak ada data yang cocok</td>
                     </tr>
                   ) : (
                     filtered.map((item) => (
                       <tr key={item.id} className="border-b border-[#f0f4f7] transition hover:bg-[#fafcfb]">
-                        <td className="px-3 py-3 font-semibold text-[#536070] whitespace-nowrap">{item.id}</td>
-                        <td className="px-3 py-3 font-medium text-[#243041] whitespace-nowrap">{item.kapal}</td>
-                        <td className="px-3 py-3 text-[#536070] whitespace-nowrap">{item.tahun}</td>
-                        <td className="px-3 py-3 whitespace-nowrap">
-                          <span className="rounded-full bg-[#f0fdf8] px-2 py-0.5 text-[10px] font-semibold text-[#15803d]">
-                            {item.bulan}
-                          </span>
+                        <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#536070]">{item.id}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-[#536070]">{item.noUrut}</td>
+                        <td className="whitespace-nowrap px-3 py-3 font-medium text-[#243041]">{item.kapal || "-"}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-[#8b96a1]">{formatDate(item.tanggal)}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-[#536070]">{item.tahun}</td>
+                        <td className="whitespace-nowrap px-3 py-3">
+                          <span className="rounded-full bg-[#f0fdf8] px-2 py-0.5 text-[10px] font-semibold text-[#15803d]">{item.bulan}</span>
                         </td>
-                        <td className="px-3 py-3 text-[#536070] whitespace-nowrap">{item.noUrut}</td>
-                        <td className="px-3 py-3 whitespace-nowrap text-[#8b96a1]">{formatDate(item.tanggal)}</td>
                         <td className="max-w-[280px] px-3 py-3 text-[#243041]">
                           <p className="line-clamp-2 leading-5">{item.deskripsi}</p>
                         </td>
                         <td className="max-w-[220px] px-3 py-3 text-[#6f7c89]">
                           <p className="line-clamp-2 leading-5">{item.keterangan || "-"}</p>
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-3 py-3">
                           <Pill label={item.status} />
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-3 py-3">
                           <div className="flex gap-1">
-                            <button
-                              onClick={() => setDetailItem(item)}
-                              className="inline-flex items-center gap-1 rounded-[7px] bg-[#f4f7f9] px-2 py-1 text-[10px] font-medium text-[#536070] hover:bg-[#e8edf2]"
-                            >
+                            <button type="button" onClick={() => setDetailItem(item)} className="inline-flex items-center gap-1 rounded-[7px] bg-[#f4f7f9] px-2 py-1 text-[10px] font-medium text-[#536070] hover:bg-[#e8edf2]">
                               <Eye size={11} /> Detail
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 setEditItem(item);
                                 setModalOpen(true);
@@ -782,10 +772,7 @@ export default function LsaFfaPage() {
                             >
                               <Pencil size={11} /> Edit
                             </button>
-                            <button
-                              onClick={() => setDeleteId(item.id)}
-                              className="inline-flex items-center gap-1 rounded-[7px] bg-[#fff0f0] px-2 py-1 text-[10px] font-medium text-[#c53030] hover:bg-[#fee2e2]"
-                            >
+                            <button type="button" onClick={() => setDeleteId(item.id)} className="inline-flex items-center gap-1 rounded-[7px] bg-[#fff0f0] px-2 py-1 text-[10px] font-medium text-[#c53030] hover:bg-[#fee2e2]">
                               <Trash2 size={11} /> Hapus
                             </button>
                           </div>
@@ -807,9 +794,7 @@ export default function LsaFfaPage() {
                   <h2 className="text-[15px] font-semibold text-[#1f2b38]">Follow Up Aktif</h2>
                   <p className="mt-0.5 text-[11px] text-[#7c8793]">Record yang masih open atau on progress</p>
                 </div>
-                <span className="rounded-full bg-[#fff7e8] px-3 py-1 text-[11px] font-semibold text-[#b26a00]">
-                  {focusItems.length} item
-                </span>
+                <span className="rounded-full bg-[#fff7e8] px-3 py-1 text-[11px] font-semibold text-[#b26a00]">{focusItems.length} item</span>
               </div>
               <div className="mt-4 space-y-2 overflow-y-auto" style={{ maxHeight: 280 }}>
                 {focusItems.length === 0 ? (
@@ -823,12 +808,8 @@ export default function LsaFfaPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-[12px] font-semibold text-[#1f2b38]">{item.kapal}</p>
-                          <p className="mt-0.5 text-[11px] text-[#536070] leading-snug">
-                            {item.deskripsi}
-                          </p>
-                          <p className="mt-1 text-[10px] text-[#7c8793]">
-                            {item.bulan} {item.tahun} • {formatDate(item.tanggal)}
-                          </p>
+                          <p className="mt-0.5 text-[11px] text-[#536070] leading-snug">{item.deskripsi}</p>
+                          <p className="mt-1 text-[10px] text-[#7c8793]">{item.bulan} {item.tahun} - {formatDate(item.tanggal)}</p>
                         </div>
                         <Pill label={item.status} />
                       </div>
@@ -844,39 +825,50 @@ export default function LsaFfaPage() {
               <h2 className="text-[15px] font-semibold text-[#1f2b38]">Ringkasan per Kapal</h2>
               <p className="mt-0.5 text-[11px] text-[#7c8793]">Jumlah record berdasarkan kapal dan status</p>
               <div className="mt-4 space-y-2 overflow-y-auto" style={{ maxHeight: 260 }}>
-                {vesselSummary.map((item) => (
-                  <div key={item.vessel} className="rounded-[10px] border border-[#edf2f7] bg-[#fafbfd] px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[12px] font-semibold text-[#243041]">{item.vessel}</p>
-                        <p className="text-[10px] text-[#8b96a1]">{item.total} record</p>
+                {vesselSummary.length ? (
+                  vesselSummary.map((item) => (
+                    <div key={item.vessel} className="rounded-[10px] border border-[#edf2f7] bg-[#fafbfd] px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[12px] font-semibold text-[#243041]">{item.vessel}</p>
+                          <p className="text-[10px] text-[#8b96a1]">{item.total} record</p>
+                        </div>
+                        <Filter size={12} className="text-[#c4cdd6]" />
                       </div>
-                      <Filter size={12} className="text-[#c4cdd6]" />
+                      <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-medium">
+                        <span className="rounded-full bg-[#fff7e8] px-2 py-0.5 text-[#b26a00]">{item.open} open</span>
+                        <span className="rounded-full bg-[#eef4ff] px-2 py-0.5 text-[#376ad6]">{item.progress} progress</span>
+                        <span className="rounded-full bg-[#edf9f1] px-2 py-0.5 text-[#15803d]">{item.closed} closed</span>
+                      </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-medium">
-                      <span className="rounded-full bg-[#fff7e8] px-2 py-0.5 text-[#b26a00]">{item.open} open</span>
-                      <span className="rounded-full bg-[#eef4ff] px-2 py-0.5 text-[#376ad6]">{item.progress} progress</span>
-                      <span className="rounded-full bg-[#edf9f1] px-2 py-0.5 text-[#15803d]">{item.closed} closed</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-[12px] text-[#8b96a1]">Belum ada ringkasan kapal.</p>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
       </section>
 
+      <AttachmentModulePanel
+        title="Attachment Security Record"
+        description="File dari halaman Attachment akan tampil jika record id dan module name cocok."
+        contexts={attachmentContexts}
+      />
+
       <FormModal
-        key={editItem?.id || nextId}
+        key={editItem?.id || modalOpen}
         isOpen={modalOpen}
         onClose={() => {
           setModalOpen(false);
           setEditItem(null);
         }}
         onSave={handleSave}
-        initialData={editItem}
-        nextId={nextId}
+        initialData={editItem || EMPTY_FORM}
         isEdit={!!editItem}
+        kapalOptions={kapalOptions}
+        isSaving={isSaving}
       />
 
       <DetailModal item={detailItem} onClose={() => setDetailItem(null)} />
@@ -886,6 +878,7 @@ export default function LsaFfaPage() {
         isOpen={!!deleteId}
         onCancel={() => setDeleteId(null)}
         onConfirm={handleDelete}
+        isDeleting={isDeleting}
       />
     </div>
   );

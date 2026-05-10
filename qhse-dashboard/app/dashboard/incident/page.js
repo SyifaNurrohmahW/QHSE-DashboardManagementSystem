@@ -628,6 +628,7 @@ export default function IncidentPage() {
     return incidents.map((item) => ({
       moduleName: "incident",
       recordId: item.id,
+      recordIds: [item.id, item.dbId].filter(Boolean).map(String),
       uploadedBy: item.owner,
     }));
   }, [incidents]);
