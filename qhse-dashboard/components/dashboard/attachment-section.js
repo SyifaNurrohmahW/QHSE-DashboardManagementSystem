@@ -9,7 +9,6 @@ import {
   FileUp,
   FolderKanban,
   Image as ImageIcon,
-  Link2,
   Lock,
   Paperclip,
   Plus,
@@ -253,7 +252,7 @@ export default function AttachmentSection({
                 <FolderKanban size={15} />
               </div>
               <p className="mt-3 text-[18px] font-semibold leading-6">{activeContext?.moduleName || "-"}</p>
-              <p className="mt-2 text-[12px] text-white/78">{activeContext?.recordId || "-"}</p>
+              <p className="mt-2 text-[12px] text-white/78">{activeContext?.uploadedBy || "-"}</p>
             </div>
 
             <div className="rounded-[22px] border border-white/12 bg-white/10 p-4 backdrop-blur-sm">
@@ -303,7 +302,7 @@ export default function AttachmentSection({
                 <div>
                   <h2 className="text-[18px] font-semibold text-[#1f2b38]">Upload Attachment</h2>
                   <p className="mt-1 text-[12px] text-[#7c8793]">
-                    Upload dilakukan di halaman ini, lalu hasilnya akan muncul di modul yang punya `module name` dan `record id` yang sama.
+                    Upload dilakukan di halaman ini, lalu hasilnya akan muncul di modul yang sesuai secara otomatis.
                   </p>
                 </div>
                 <div className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#1f9b58]">
@@ -369,13 +368,12 @@ export default function AttachmentSection({
                   </div>
                   <div>
                     <h3 className="text-[15px] font-semibold text-[#243041]">Hidden Metadata</h3>
-                    <p className="text-[12px] text-[#7c8793]">Ini auto dari sistem. Yang dipakai modul untuk menarik attachment adalah pasangan `Module Name` dan `Record ID`.</p>
+                    <p className="text-[12px] text-[#7c8793]">Ini auto dari sistem. User yang menambahkan file ditampilkan sebagai nama, bukan ID record.</p>
                   </div>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <ReadonlyField label="Module Name" value={activeContext?.moduleName} icon={FolderKanban} />
-                  <ReadonlyField label="Record ID" value={activeContext?.recordId} icon={Link2} />
                   <ReadonlyField label="Uploaded By" value={activeContext?.uploadedBy} icon={UserRound} />
                   <ReadonlyField label="Uploaded At" value={formatDateTime(new Date().toISOString())} icon={CalendarDays} />
                 </div>
@@ -440,7 +438,6 @@ export default function AttachmentSection({
                     <p className="mt-2 text-[14px] font-semibold text-[#243041]">{selectedAttachment.fileName}</p>
                   </div>
                   <ReadonlyField label="Module Name" value={selectedAttachment.moduleName} icon={FolderKanban} />
-                  <ReadonlyField label="Record ID" value={selectedAttachment.recordId} icon={Link2} />
                   <ReadonlyField label="Uploaded By" value={selectedAttachment.uploadedBy} icon={UserRound} />
                   <ReadonlyField label="Uploaded At" value={formatDateTime(selectedAttachment.uploadedAt)} icon={CalendarDays} />
                 </div>
@@ -468,7 +465,7 @@ export default function AttachmentSection({
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Cari file, modul, record id, uploader"
+                  placeholder="Cari file, modul, uploader"
                   className="w-full rounded-[12px] border border-[#dfe5ea] bg-white py-2.5 pl-10 pr-3 text-[13px] text-[#273240] outline-none focus:border-[#15803d] focus:ring-2 focus:ring-[#d1fae5]"
                 />
               </div>
@@ -479,7 +476,7 @@ export default function AttachmentSection({
             <table className="min-w-[1080px] w-full border-collapse text-[12px]">
               <thead>
                 <tr className="bg-[#fafbfc]">
-                  {["Preview", "Attachment ID", "File Name", "Module", "Record ID", "Uploaded By", "Uploaded At", "Size", "Action"].map((head) => (
+                  {["Preview", "Attachment ID", "File Name", "Module", "Uploaded By", "Uploaded At", "Size", "Action"].map((head) => (
                     <th
                       key={head}
                       className="border-b border-[#edf1f4] px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]"
@@ -492,7 +489,7 @@ export default function AttachmentSection({
               <tbody>
                 {filteredAttachments.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-14 text-center text-[13px] text-[#8b96a1]">
+                    <td colSpan={8} className="px-4 py-14 text-center text-[13px] text-[#8b96a1]">
                       Belum ada attachment yang cocok dengan pencarian saat ini.
                     </td>
                   </tr>
@@ -515,7 +512,6 @@ export default function AttachmentSection({
                         <p className="mt-1 text-[11px] text-[#8b96a1]">Asli: {item.originalFileName}</p>
                       </td>
                       <td className="px-3 py-3 text-[#51606d]">{item.moduleName}</td>
-                      <td className="px-3 py-3 text-[#51606d]">{item.recordId}</td>
                       <td className="px-3 py-3 text-[#51606d]">{item.uploadedBy}</td>
                       <td className="px-3 py-3 text-[#51606d]">{formatDateTime(item.uploadedAt)}</td>
                       <td className="px-3 py-3 text-[#51606d]">{item.sizeLabel}</td>

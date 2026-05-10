@@ -3,11 +3,11 @@
 import AttachmentSection from "@/components/dashboard/attachment-section";
 
 const MODULE_CONTEXTS = [
-  { moduleName: "Incident Report", recordId: "INC-2026-014", uploadedBy: "QHSE Admin" },
-  { moduleName: "Hazard Report", recordId: "HZD-2026-027", uploadedBy: "Safety Officer" },
-  { moduleName: "NCR", recordId: "NCR-2026-013", uploadedBy: "Superintendent" },
-  { moduleName: "Security Record", recordId: "SEC-005", uploadedBy: "Port Security" },
-  { moduleName: "STF & VIR", recordId: "VIR-2026-008", uploadedBy: "Marine Inspector" },
+  { moduleName: "Incident Report", recordId: "INC-2026-014", uploadedBy: "Super Admin" },
+  { moduleName: "Hazard Report", recordId: "HZD-2026-027", uploadedBy: "Super Admin" },
+  { moduleName: "NCR", recordId: "NCR-2026-013", uploadedBy: "Super Admin" },
+  { moduleName: "Security Record", recordId: "SEC-005", uploadedBy: "Super Admin" },
+  { moduleName: "STF & VIR", recordId: "VIR-2026-008", uploadedBy: "Super Admin" },
 ];
 
 const INITIAL_ATTACHMENTS = [
@@ -17,7 +17,7 @@ const INITIAL_ATTACHMENTS = [
     originalFileName: "bridge-checklist-revisi.pdf",
     moduleName: "NCR",
     recordId: "NCR-2026-013",
-    uploadedBy: "Superintendent",
+    uploadedBy: "Super Admin",
     uploadedAt: "2026-04-28T09:10:00.000Z",
     sizeLabel: "1.8 MB",
   },
@@ -27,7 +27,7 @@ const INITIAL_ATTACHMENTS = [
     originalFileName: "main-deck-night-shot.jpg",
     moduleName: "Security Record",
     recordId: "SEC-005",
-    uploadedBy: "Port Security",
+    uploadedBy: "Super Admin",
     uploadedAt: "2026-04-27T20:35:00.000Z",
     sizeLabel: "2.4 MB",
   },
@@ -37,7 +37,7 @@ const INITIAL_ATTACHMENTS = [
     originalFileName: "scene-overview.png",
     moduleName: "Incident Report",
     recordId: "INC-2026-014",
-    uploadedBy: "QHSE Admin",
+    uploadedBy: "Super Admin",
     uploadedAt: "2026-04-26T11:45:00.000Z",
     sizeLabel: "860 KB",
   },
