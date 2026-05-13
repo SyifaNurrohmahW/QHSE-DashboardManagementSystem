@@ -120,7 +120,7 @@ export async function searchKapal(keyword) {
 export async function getKapalOptions() {
   const { data, error } = await supabase
     .from(TABLE_NAME)
-    .select("id, kode_kapal, nama_kapal")
+    .select("id, kode_kapal, nama_kapal, tipe_kapal, area")
     .order("nama_kapal", { ascending: true });
 
   if (error) {
@@ -134,5 +134,7 @@ export async function getKapalOptions() {
     value: item.id,
     nama_kapal: item.nama_kapal,
     kode_kapal: item.kode_kapal,
+    tipe_kapal: item.tipe_kapal,
+    area: item.area,
   }));
 }

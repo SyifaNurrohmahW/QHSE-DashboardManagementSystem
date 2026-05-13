@@ -26,75 +26,32 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
+import { getMonthlyReportView } from "@/lib/services/monthlyReport";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const monthlyData = [
-  { month: "Jan", hazard: 52, stfVir: 2, security: 0, manhours: 112400 },
-  { month: "Feb", hazard: 55, stfVir: 1, security: 0, manhours: 109800 },
-  { month: "Mar", hazard: 61, stfVir: 3, security: 2, manhours: 121300 },
-  { month: "Apr", hazard: 68, stfVir: 1, security: 0, manhours: 118900 },
-  { month: "May", hazard: 59, stfVir: 2, security: 0, manhours: 120200 },
-  { month: "Jun", hazard: 64, stfVir: 1, security: 0, manhours: 119600 },
-  { month: "Jul", hazard: 70, stfVir: 2, security: 0, manhours: 125700 },
-  { month: "Aug", hazard: 58, stfVir: 1, security: 0, manhours: 122100 },
-  { month: "Sep", hazard: 60, stfVir: 0, security: 0, manhours: 116900 },
-  { month: "Oct", hazard: 65, stfVir: 0, security: 0, manhours: 124500 },
-  { month: "Nov", hazard: 72, stfVir: 1, security: 0, manhours: 126200 },
-  { month: "Dec", hazard: 63, stfVir: 0, security: 0, manhours: 123800 },
-];
+const MONTH_SHORT_BY_NUMBER = {
+  1: "Jan",
+  2: "Feb",
+  3: "Mar",
+  4: "Apr",
+  5: "May",
+  6: "Jun",
+  7: "Jul",
+  8: "Aug",
+  9: "Sep",
+  10: "Oct",
+  11: "Nov",
+  12: "Dec",
+};
 
-const ncrStatus = [
-  { name: "Sec. A", value: 2, color: "#f59e0b" },
-  { name: "Sec. B", value: 1, color: "#3b82f6" },
-  { name: "Completed Sec. B", value: 0, color: "#8b5cf6" },
-  { name: "Closed", value: 7, color: "#10b981" },
-];
-
-const injuryCategory = [
-  { name: "FAI", value: 1 },
-  { name: "MTI", value: 0 },
-  { name: "LTI", value: 0 },
-  { name: "Grounded", value: 3 },
-  { name: "Collision", value: 2 },
-  { name: "Machinery", value: 1 },
-  { name: "Nearmiss", value: 1 },
-  { name: "Other", value: 0 },
-];
-
-const equipmentAlerts = [
-  {
-    kapal: "MBP 121",
-    equipment: "PMK",
-    nextInspection: "2026-06-10",
-    remainingDays: 43,
-    status: "Warning",
-  },
-  {
-    kapal: "MBP 122",
-    equipment: "EPIRB",
-    nextInspection: "2026-02-20",
-    remainingDays: -68,
-    status: "Expired",
-  },
-  {
-    kapal: "MBP 145",
-    equipment: "CO2 System",
-    nextInspection: "2026-05-18",
-    remainingDays: 20,
-    status: "Warning",
-  },
-  {
-    kapal: "MBP 148",
-    equipment: "SCBA / EEBD",
-    nextInspection: "2026-12-01",
-    remainingDays: 217,
-    status: "Safe",
-  },
-];
+const NCR_COLORS = {
+  open: "#f59e0b",
+  closed: "#10b981",
+};
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("id-ID");
@@ -146,26 +103,97 @@ function ChartContainer({ height, children, className = "" }) {
 }
 
 export default function MonthlyReportPage() {
-  const [selectedYear, setSelectedYear] = useState("2026");
+  const [monthlyReports, setMonthlyReports] = useState([]);
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState("All");
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getMonthlyReportView()
+      .then((result) => {
+        if (!isMounted) return;
+        setMonthlyReports(result);
+        setErrorMessage("");
+
+        const latestYear = result[0]?.tahun;
+        if (latestYear) {
+          setSelectedYear(String(latestYear));
+        }
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil data monthly report.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const monthlyData = useMemo(() => {
+    return monthlyReports
+      .filter((item) => String(item.tahun) === selectedYear)
+      .map((item) => ({
+        month: MONTH_SHORT_BY_NUMBER[item.bulanNumber] || item.bulan,
+        monthNumber: item.bulanNumber,
+        hazard: Number(item.totalHazardReport || 0),
+        stfVir: Number(item.totalStfVir || 0),
+        security: Number(item.totalSecurityRecord || 0),
+        manhours: Number(item.totalManhours || 0),
+        ncr: Number(item.totalNcr || 0),
+        incident: Number(item.totalInsiden || 0),
+        manpowerFleet: Number(item.totalManpowerFleet || 0),
+        manpowerShore: Number(item.totalManpowerShore || 0),
+        manpowerAll: Number(item.totalManpowerAll || 0),
+      }))
+      .sort((a, b) => a.monthNumber - b.monthNumber);
+  }, [monthlyReports, selectedYear]);
+
+  const yearOptions = useMemo(() => {
+    const years = [...new Set(monthlyReports.map((item) => String(item.tahun)).filter(Boolean))];
+    if (!years.includes(selectedYear)) years.push(selectedYear);
+    return years.sort((a, b) => Number(b) - Number(a));
+  }, [monthlyReports, selectedYear]);
 
   const filteredMonthly = useMemo(() => {
     if (selectedMonth === "All") return monthlyData;
     return monthlyData.filter((item) => item.month === selectedMonth);
-  }, [selectedMonth]);
+  }, [monthlyData, selectedMonth]);
 
   const totalManhours = filteredMonthly.reduce((sum, item) => sum + item.manhours, 0);
   const totalHazard = filteredMonthly.reduce((sum, item) => sum + item.hazard, 0);
   const totalStfVir = filteredMonthly.reduce((sum, item) => sum + item.stfVir, 0);
   const totalSecurity = filteredMonthly.reduce((sum, item) => sum + item.security, 0);
-  const totalNcr = ncrStatus.reduce((sum, item) => sum + item.value, 0);
-  const openNcr = ncrStatus
-    .filter((item) => item.name !== "Closed")
-    .reduce((sum, item) => sum + item.value, 0);
+  const totalNcr = filteredMonthly.reduce((sum, item) => sum + item.ncr, 0);
+  const totalIncident = filteredMonthly.reduce((sum, item) => sum + item.incident, 0);
+  const totalManpowerAll = filteredMonthly.reduce((sum, item) => sum + item.manpowerAll, 0);
+  const openNcr = totalNcr;
 
-  const criticalEquipment = equipmentAlerts.filter(
-    (item) => item.status === "Expired" || item.status === "Warning"
-  ).length;
+  const ncrStatus = useMemo(
+    () => [
+      { name: "Open / Recorded", value: openNcr, color: NCR_COLORS.open },
+      { name: "Closed", value: 0, color: NCR_COLORS.closed },
+    ],
+    [openNcr]
+  );
+
+  const injuryCategory = useMemo(
+    () => [
+      { name: "Incident", value: totalIncident },
+      { name: "Other", value: 0 },
+    ],
+    [totalIncident]
+  );
+
+  const equipmentAlerts = [];
+  const criticalEquipment = 0;
 
   const kpiCards = [
     {
@@ -213,6 +241,8 @@ export default function MonthlyReportPage() {
       ["Total Security Record", totalSecurity],
       ["Total NCR", totalNcr],
       ["Open NCR", openNcr],
+      ["Total Incident", totalIncident],
+      ["Total Manpower All", totalManpowerAll],
       ["Critical Equipment", criticalEquipment],
     ];
 
@@ -220,7 +250,7 @@ export default function MonthlyReportPage() {
     const wsMonthly = XLSX.utils.json_to_sheet(filteredMonthly);
     const wsNcr = XLSX.utils.json_to_sheet(ncrStatus);
     const wsIncident = XLSX.utils.json_to_sheet(injuryCategory);
-    const wsEquipment = XLSX.utils.json_to_sheet(equipmentAlerts);
+    const wsEquipment = XLSX.utils.json_to_sheet(equipmentAlerts.length ? equipmentAlerts : [{ message: "Tidak ada data equipment alert dari monthly report." }]);
 
     XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
     XLSX.utils.book_append_sheet(wb, wsMonthly, "Monthly Trend");
@@ -257,8 +287,9 @@ export default function MonthlyReportPage() {
               onChange={(e) => setSelectedYear(e.target.value)}
               className="rounded-[10px] border border-white/20 bg-white px-4 py-2.5 text-[13px] font-semibold text-emerald-700 outline-none"
             >
-              <option value="2026">2026</option>
-              <option value="2025">2025</option>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
             </select>
 
             <select
@@ -328,6 +359,18 @@ export default function MonthlyReportPage() {
           );
         })}
       </section>
+
+      {errorMessage ? (
+        <div className="rounded-[14px] border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          {errorMessage}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="rounded-[14px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-700">
+          Mengambil data monthly report dari Supabase...
+        </div>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <Card className="min-w-0">
@@ -495,7 +538,13 @@ export default function MonthlyReportPage() {
               </thead>
 
               <tbody>
-                {equipmentAlerts.map((item) => (
+                {equipmentAlerts.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-[12px] text-[#8b96a1]">
+                      Tidak ada data equipment alert dari monthly report.
+                    </td>
+                  </tr>
+                ) : equipmentAlerts.map((item) => (
                   <tr key={`${item.kapal}-${item.equipment}`} className="border-b border-[#f0f3f5]">
                     <td className="px-3 py-3 font-semibold text-[#243041]">{item.kapal}</td>
                     <td className="px-3 py-3 text-[#4a5568]">{item.equipment}</td>
@@ -524,12 +573,10 @@ export default function MonthlyReportPage() {
             </div>
             <div>
               <h2 className="text-[15px] font-semibold text-[#243041]">
-                Catatan Implementasi
+                Catatan Data
               </h2>
               <p className="mt-1 text-[12px] leading-6 text-[#6b7280]">
-                Page ini masih memakai mock data untuk tahap desain. Nanti saat connect Supabase,
-                data Monthly Report diambil dari view rekap: manhours, incident, hazard report,
-                NCR, LSA & FFA, STF & VIR, dan security record.
+                Data Monthly Report diambil dari Supabase view rekap bulanan. Bagian yang membutuhkan data detail di luar view akan tampil kosong sampai tersedia di service.
               </p>
             </div>
           </div>
