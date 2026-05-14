@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import {
   Anchor,
   ArrowUpRight,
+  AlertTriangle,
   CalendarClock,
   CheckCircle2,
   Fuel,
   Plus,
   Ship,
   ShieldCheck,
+  Trash2,
   Wrench,
   X,
   FileText,
@@ -225,12 +227,89 @@ function VesselModal({ isOpen, form, onChange, onClose, onSubmit, isSaving }) {
   );
 }
 
+function DeleteVesselModal({ vessel, onClose, onConfirm, isDeleting, errorMessage }) {
+  if (!vessel) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1720]/55 px-4 py-6">
+      <div className="w-full max-w-md overflow-hidden rounded-[22px] bg-white shadow-[0_24px_60px_rgba(15,23,32,0.25)]">
+        <div className="flex items-start gap-4 border-b border-[#edf1f4] px-6 py-5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#fff0f0] text-[#d92d20]">
+            <AlertTriangle size={22} strokeWidth={2.2} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#d92d20]">
+              Konfirmasi Hapus
+            </p>
+            <h2 className="mt-2 text-[22px] font-bold leading-tight text-[#243041]">
+              Hapus data kapal?
+            </h2>
+            <p className="mt-2 text-[13px] leading-6 text-[#657482]">
+              Data <span className="font-semibold text-[#243041]">{vessel.namaKapal}</span> akan
+              dihapus dari master kapal.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isDeleting}
+            className="ml-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f4f7f9] text-[#5e6a76] transition hover:bg-[#e9eff3] disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Tutup modal hapus"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5">
+          <div className="rounded-[16px] border border-[#ffe1e1] bg-[#fff8f8] px-4 py-3">
+            <p className="text-[13px] leading-6 text-[#7a3440]">
+              Jika kapal masih digunakan di Incident atau modul lain, sistem akan menolak hapus dan
+              menampilkan daftar data terkait.
+            </p>
+          </div>
+
+          {errorMessage ? (
+            <div className="mt-3 rounded-[14px] border border-[#ffd7d7] bg-[#fff7f7] px-4 py-3 text-[13px] font-medium leading-6 text-[#b42318]">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isDeleting}
+              className="inline-flex items-center justify-center rounded-[12px] border border-[#d7e0e6] px-4 py-3 text-[13px] font-semibold text-[#51606d] transition hover:bg-[#f6f8fa] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isDeleting}
+              className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#d92d20] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#b42318] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <Trash2 size={16} />
+              {isDeleting ? "Menghapus..." : "Ya, hapus"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function VesselPage() {
   const [vessels, setVessels] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   const totalKapal = vessels.length;
@@ -357,18 +436,36 @@ export default function VesselPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (vesselId) => {
-    const isConfirmed = window.confirm("Hapus data kapal ini?");
-    if (!isConfirmed) {
+  const handleOpenDelete = (vessel) => {
+    setDeleteError("");
+    setDeleteTarget(vessel);
+  };
+
+  const handleCloseDelete = () => {
+    if (isDeleting) {
+      return;
+    }
+
+    setDeleteTarget(null);
+    setDeleteError("");
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) {
       return;
     }
 
     try {
+      setIsDeleting(true);
+      setDeleteError("");
       setErrorMessage("");
-      await deleteKapal(vesselId);
-      setVessels((current) => current.filter((item) => item.id !== vesselId));
+      await deleteKapal(deleteTarget.id);
+      setVessels((current) => current.filter((item) => item.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (error) {
-      setErrorMessage(error.message || "Gagal menghapus data kapal.");
+      setDeleteError(error.message || "Gagal menghapus data kapal.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -631,7 +728,7 @@ export default function VesselPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDelete(vessel.id)}
+                              onClick={() => handleOpenDelete(vessel)}
                               className="inline-flex items-center justify-center rounded-[6px] bg-[#fff0f0] px-2.5 py-1 text-[10px] font-medium text-[#c53030] transition hover:bg-[#fecaca]"
                             >
                               Hapus
@@ -656,6 +753,13 @@ export default function VesselPage() {
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
         isSaving={isSaving}
+      />
+      <DeleteVesselModal
+        vessel={deleteTarget}
+        onClose={handleCloseDelete}
+        onConfirm={handleDelete}
+        isDeleting={isDeleting}
+        errorMessage={deleteError}
       />
     </>
   );

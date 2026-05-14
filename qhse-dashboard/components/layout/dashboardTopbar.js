@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, Bell, CalendarDays, ChevronDown, Clock3, LogOut, Menu, User } from "lucide-react";
 import Swal from "sweetalert2";
 import {
@@ -10,6 +10,23 @@ import {
   logoutUser,
 } from "@/lib/services/authService";
 import { getLsaFfaList } from "@/lib/services/lsaFfaService";
+
+const MONTH_OPTIONS = [
+  { value: "1", short: "Jan", label: "Januari" },
+  { value: "2", short: "Feb", label: "Februari" },
+  { value: "3", short: "Mar", label: "Maret" },
+  { value: "4", short: "Apr", label: "April" },
+  { value: "5", short: "Mei", label: "Mei" },
+  { value: "6", short: "Jun", label: "Juni" },
+  { value: "7", short: "Jul", label: "Juli" },
+  { value: "8", short: "Agu", label: "Agustus" },
+  { value: "9", short: "Sep", label: "September" },
+  { value: "10", short: "Okt", label: "Oktober" },
+  { value: "11", short: "Nov", label: "November" },
+  { value: "12", short: "Des", label: "Desember" },
+];
+
+const YEAR_OPTIONS = ["2024", "2025", "2026", "2027"];
 
 function dateDiffInDays(date) {
   if (!date) return null;
@@ -89,6 +106,11 @@ export default function DashboardTopbar({
   onMobileMenuClick,
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentDate = new Date();
+  const selectedMonth = searchParams.get("month") || String(currentDate.getMonth() + 1);
+  const selectedYear = searchParams.get("year") || String(currentDate.getFullYear());
   const [currentUser, setCurrentUser] = useState(null);
   const [currentRole, setCurrentRole] = useState("");
   const [equipmentAlerts, setEquipmentAlerts] = useState([]);
@@ -158,6 +180,14 @@ export default function DashboardTopbar({
   const notificationCount = equipmentAlerts.length;
   const expiredCount = equipmentAlerts.filter((item) => item.alertLabel === "Expired").length;
   const warningCount = equipmentAlerts.filter((item) => item.alertLabel === "Warning").length;
+  const selectedMonthOption = MONTH_OPTIONS.find((item) => item.value === selectedMonth) || MONTH_OPTIONS[currentDate.getMonth()];
+
+  function updatePeriod(nextValue, key) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(key, nextValue);
+
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
 
   async function handleLogout() {
     const result = await Swal.fire({
@@ -224,9 +254,35 @@ export default function DashboardTopbar({
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 rounded-md border border-[#e8ecef] px-3 py-2 text-[12px] text-[#5e6b78] md:flex">
+          <div className="hidden items-center gap-2 rounded-md border border-[#e8ecef] bg-white px-3 py-1.5 text-[12px] text-[#5e6b78] md:flex">
             <CalendarDays size={14} className="text-[#7a8794]" />
-            <span>20 Mei 2024 - 26 Mei 2024</span>
+            <span className="font-medium text-[#425466]">
+              {selectedMonthOption.short} {selectedYear}
+            </span>
+            <select
+              value={selectedMonth}
+              onChange={(event) => updatePeriod(event.target.value, "month")}
+              className="max-w-[92px] bg-transparent text-[12px] font-semibold text-[#425466] outline-none"
+              aria-label="Filter bulan dashboard"
+            >
+              {MONTH_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedYear}
+              onChange={(event) => updatePeriod(event.target.value, "year")}
+              className="max-w-[70px] bg-transparent text-[12px] font-semibold text-[#425466] outline-none"
+              aria-label="Filter tahun dashboard"
+            >
+              {YEAR_OPTIONS.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
             <ChevronDown size={14} className="text-[#93a1af]" />
           </div>
 
