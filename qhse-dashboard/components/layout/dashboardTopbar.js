@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Bell, CalendarDays, ChevronDown, Clock3, LogOut, Menu, User } from "lucide-react";
+import { AlertTriangle, Bell, CalendarDays, CheckCheck, ChevronDown, Clock3, LogOut, Menu, User } from "lucide-react";
 import Swal from "sweetalert2";
 import {
   getCurrentUser,
@@ -10,6 +10,13 @@ import {
   logoutUser,
 } from "@/lib/services/authService";
 import { getLsaFfaList } from "@/lib/services/lsaFfaService";
+import {
+  NOTIFICATION_PREFS_EVENT,
+  NOTIFICATION_PREFS_STORAGE_KEY,
+  readNotificationPrefs,
+} from "@/lib/notificationPreferences";
+
+const READ_NOTIFICATION_STORAGE_KEY = "qhse_read_equipment_notifications";
 
 const MONTH_OPTIONS = [
   { value: "1", short: "Jan", label: "Januari" },
@@ -100,6 +107,25 @@ function getDisplayName(user) {
   );
 }
 
+function getAlertKey(item) {
+  return `${item.id}:${item.alertLabel}`;
+}
+
+function readNotificationStore() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    return JSON.parse(window.localStorage.getItem(READ_NOTIFICATION_STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeNotificationStore(ids) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(READ_NOTIFICATION_STORAGE_KEY, JSON.stringify(ids));
+}
+
 export default function DashboardTopbar({
   isDesktopSidebarOpen,
   onDesktopMenuClick,
@@ -114,6 +140,8 @@ export default function DashboardTopbar({
   const [currentUser, setCurrentUser] = useState(null);
   const [currentRole, setCurrentRole] = useState("");
   const [equipmentAlerts, setEquipmentAlerts] = useState([]);
+  const [readNotificationIds, setReadNotificationIds] = useState(() => readNotificationStore());
+  const [notificationPrefs, setNotificationPrefs] = useState(() => readNotificationPrefs());
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   useEffect(() => {
@@ -133,6 +161,24 @@ export default function DashboardTopbar({
     }
 
     loadLoggedInUser();
+  }, []);
+
+  useEffect(() => {
+    function syncPrefs(event) {
+      if (event.type === "storage" && event.key !== NOTIFICATION_PREFS_STORAGE_KEY) {
+        return;
+      }
+
+      setNotificationPrefs(readNotificationPrefs());
+    }
+
+    window.addEventListener("storage", syncPrefs);
+    window.addEventListener(NOTIFICATION_PREFS_EVENT, syncPrefs);
+
+    return () => {
+      window.removeEventListener("storage", syncPrefs);
+      window.removeEventListener(NOTIFICATION_PREFS_EVENT, syncPrefs);
+    };
   }, []);
 
   useEffect(() => {
@@ -177,7 +223,11 @@ export default function DashboardTopbar({
 
   const displayName = useMemo(() => getDisplayName(currentUser), [currentUser]);
   const userInitial = displayName.charAt(0).toUpperCase();
-  const notificationCount = equipmentAlerts.length;
+  const unreadAlerts = useMemo(
+    () => equipmentAlerts.filter((item) => !readNotificationIds.includes(getAlertKey(item))),
+    [equipmentAlerts, readNotificationIds]
+  );
+  const notificationCount = notificationPrefs.equipmentExpiry ? unreadAlerts.length : 0;
   const expiredCount = equipmentAlerts.filter((item) => item.alertLabel === "Expired").length;
   const warningCount = equipmentAlerts.filter((item) => item.alertLabel === "Warning").length;
   const selectedMonthOption = MONTH_OPTIONS.find((item) => item.value === selectedMonth) || MONTH_OPTIONS[currentDate.getMonth()];
@@ -187,6 +237,15 @@ export default function DashboardTopbar({
     params.set(key, nextValue);
 
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function handleMarkNotificationsRead() {
+    const nextIds = Array.from(
+      new Set([...readNotificationIds, ...equipmentAlerts.map((item) => getAlertKey(item))])
+    );
+
+    setReadNotificationIds(nextIds);
+    writeNotificationStore(nextIds);
   }
 
   async function handleLogout() {
@@ -311,26 +370,46 @@ export default function DashboardTopbar({
                         {expiredCount} expired, {warningCount} warning
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsNotificationOpen(false);
-                        router.push("/dashboard/equipment");
-                      }}
-                      className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#15803d]"
-                    >
-                      Lihat semua
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {notificationCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={handleMarkNotificationsRead}
+                          className="inline-flex items-center gap-1 rounded-full bg-[#f4f7f9] px-3 py-1 text-[11px] font-semibold text-[#536070] hover:bg-[#e8edf2]"
+                        >
+                          <CheckCheck size={12} />
+                          Tandai sudah dibaca
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNotificationOpen(false);
+                          router.push("/dashboard/equipment");
+                        }}
+                        className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#15803d]"
+                      >
+                        Lihat semua
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 <div className="max-h-[320px] overflow-y-auto p-2">
-                  {notificationCount === 0 ? (
+                  {!notificationPrefs.equipmentExpiry ? (
+                    <div className="px-4 py-8 text-center text-[12px] text-[#8b96a1]">
+                      Notifikasi equipment expiry sedang nonaktif dari Profile.
+                    </div>
+                  ) : equipmentAlerts.length === 0 ? (
                     <div className="px-4 py-8 text-center text-[12px] text-[#8b96a1]">
                       Tidak ada equipment expired atau warning.
                     </div>
+                  ) : notificationCount === 0 ? (
+                    <div className="px-4 py-8 text-center text-[12px] text-[#8b96a1]">
+                      Semua notifikasi sudah dibaca.
+                    </div>
                   ) : (
-                    equipmentAlerts.slice(0, 6).map((item) => {
+                    unreadAlerts.slice(0, 6).map((item) => {
                       const isExpired = item.alertLabel === "Expired";
                       const Icon = isExpired ? AlertTriangle : Clock3;
 

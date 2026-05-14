@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   CalendarDays,
@@ -13,115 +13,50 @@ import {
   X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  MANHOURS_AREA_OPTIONS,
+  MANHOURS_MONTH_OPTIONS,
+  MANHOURS_TIPE_KAPAL_OPTIONS,
+  createManhours,
+  deleteManhours,
+  getManhoursList,
+  updateManhours,
+} from "@/lib/services/manhoursService";
+import {
+  MANPOWER_CATEGORY_OPTIONS,
+  MANPOWER_MONTH_OPTIONS,
+  createManpower,
+  deleteManpower,
+  getManpowerList,
+  updateManpower,
+} from "@/lib/services/manpowerService";
+import { getKapalOptions } from "@/lib/services/kapalService";
 
-const MONTH_OPTIONS = [
-  "Januari",
-  "Februari",
-  "Maret",
-  "April",
-  "Mei",
-  "Juni",
-  "Juli",
-  "Agustus",
-  "September",
-  "Oktober",
-  "November",
-  "Desember",
-];
-
-const AREA_OPTIONS = ["Lower", "Upper", "Shore"];
-const SHORE_CATEGORIES = ["MBP BJM", "ISS", "Other"];
-
-const VESSEL_OPTIONS = [
-  { name: "PB Borneo 01", type: "PB", standardCrew: 9 },
-  { name: "PB Borneo 02", type: "PB", standardCrew: 9 },
-  { name: "TUG Maritim 01", type: "TUG", standardCrew: 11 },
-  { name: "FOTB Anugerah", type: "FOTB", standardCrew: 4 },
-  { name: "SPB Pioneer", type: "SPB", standardCrew: 15 },
-];
-
-const FLEET_INITIAL_DATA = [
-  {
-    id: "MH-2026-001",
-    vessel: "PB Borneo 01",
-    year: 2026,
-    month: "Januari",
-    area: "Lower",
-    vesselType: "PB",
-    standardCrew: 9,
-    days: 31,
-    manhours: 7031,
-    description: "Operasi rutin area lower river.",
-  },
-  {
-    id: "MH-2026-002",
-    vessel: "TUG Maritim 01",
-    year: 2026,
-    month: "Februari",
-    area: "Upper",
-    vesselType: "TUG",
-    standardCrew: 11,
-    days: 28,
-    manhours: 7762,
-    description: "Assist towing selama peak operation.",
-  },
-  {
-    id: "MH-2026-003",
-    vessel: "SPB Pioneer",
-    year: 2026,
-    month: "Maret",
-    area: "Shore",
-    vesselType: "SPB",
-    standardCrew: 15,
-    days: 31,
-    manhours: 11718,
-    description: "Standby dan support fuel distribution.",
-  },
-];
-
-const SHORE_INITIAL_DATA = [
-  {
-    id: "MP-2026-001",
-    year: 2026,
-    month: "Januari",
-    category: "MBP BJM",
-    peopleCount: 18,
-    description: "Personel office dan operational support.",
-  },
-  {
-    id: "MP-2026-002",
-    year: 2026,
-    month: "Februari",
-    category: "ISS",
-    peopleCount: 12,
-    description: "Petugas outsourcing untuk site support.",
-  },
-  {
-    id: "MP-2026-003",
-    year: 2026,
-    month: "Maret",
-    category: "Other",
-    peopleCount: 5,
-    description: "Tenaga temporary project support.",
-  },
-];
+const MONTH_OPTIONS = MANHOURS_MONTH_OPTIONS.map((item) => item.label);
+const AREA_OPTIONS = MANHOURS_AREA_OPTIONS;
+const SHORE_CATEGORIES = MANPOWER_CATEGORY_OPTIONS.map((item) => item.label);
 
 const EMPTY_FLEET_FORM = {
-  id: "",
-  vessel: "",
-  year: new Date().getFullYear(),
-  month: MONTH_OPTIONS[new Date().getMonth()],
+  id: null,
+  kapal_id: "",
+  tahun: new Date().getFullYear(),
+  bulan: MONTH_OPTIONS[new Date().getMonth()],
   area: "",
-  description: "",
+  tipeKapal: "",
+  avgNoOfCrews: "",
+  standardCrew: "",
+  allowancePercent: 5,
+  manhours: "",
+  keterangan: "",
 };
 
 const EMPTY_SHORE_FORM = {
-  id: "",
-  year: new Date().getFullYear(),
-  month: MONTH_OPTIONS[new Date().getMonth()],
-  category: "",
-  peopleCount: "",
-  description: "",
+  id: null,
+  tahun: new Date().getFullYear(),
+  bulan: MONTH_OPTIONS[new Date().getMonth()],
+  kategori: "",
+  jumlahOrang: "",
+  keterangan: "",
 };
 
 function formatNumber(value) {
@@ -134,24 +69,57 @@ function getDaysInMonth(monthName, year) {
   return new Date(Number(year), monthIndex + 1, 0).getDate();
 }
 
-function generateRunningId(items, prefix, year) {
-  const yearItems = items.filter((item) => String(item.id).startsWith(`${prefix}-${year}-`));
-  const nextNumber = yearItems.length + 1;
-  return `${prefix}-${year}-${String(nextNumber).padStart(3, "0")}`;
-}
-
-function calculateFleetValues(vesselName, month, year) {
-  const vessel = VESSEL_OPTIONS.find((item) => item.name === vesselName);
-  const standardCrew = vessel?.standardCrew || 0;
-  const vesselType = vessel?.type || "-";
-  const days = getDaysInMonth(month, year);
-  const manhours = Math.round(standardCrew * 24 * days * 1.05);
+function calculateFleetValues(form) {
+  const crew = Number(form.avgNoOfCrews || form.standardCrew || 0);
+  const allowance = Number(form.allowancePercent || 0);
+  const days = getDaysInMonth(form.bulan, form.tahun);
+  const manhours = Math.round(crew * 24 * days * (1 + allowance / 100));
 
   return {
-    vesselType,
-    standardCrew,
     days,
     manhours,
+  };
+}
+
+function matchOptionValue(options, value) {
+  const option = options.find(
+    (item) =>
+      item.value === value ||
+      item.label === value ||
+      String(item.value).toLowerCase() === String(value || "").toLowerCase()
+  );
+
+  return option?.value || value || "";
+}
+
+function toFleetForm(item) {
+  if (!item) return EMPTY_FLEET_FORM;
+
+  return {
+    id: item.id,
+    kapal_id: item.kapal_id || "",
+    tahun: item.tahun || new Date().getFullYear(),
+    bulan: item.bulan || MONTH_OPTIONS[new Date().getMonth()],
+    area: matchOptionValue(AREA_OPTIONS, item.areaValue || item.area || ""),
+    tipeKapal: item.tipeKapalValue || item.tipeKapal || "",
+    avgNoOfCrews: item.avgNoOfCrews ?? "",
+    standardCrew: item.standardCrew ?? "",
+    allowancePercent: item.allowancePercent ?? 5,
+    manhours: item.manhours ?? "",
+    keterangan: item.keterangan || "",
+  };
+}
+
+function toShoreForm(item) {
+  if (!item) return EMPTY_SHORE_FORM;
+
+  return {
+    id: item.id,
+    tahun: item.tahun || new Date().getFullYear(),
+    bulan: item.bulan || MONTH_OPTIONS[new Date().getMonth()],
+    kategori: item.kategori || "",
+    jumlahOrang: item.jumlahOrang ?? "",
+    keterangan: item.keterangan || "",
   };
 }
 
@@ -211,8 +179,8 @@ function SegmentedButton({ activeTab, onChange }) {
   );
 }
 
-function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
-  const [form, setForm] = useState(initialData || { ...EMPTY_FLEET_FORM, id: nextId });
+function FleetFormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOptions, isSaving }) {
+  const [form, setForm] = useState(toFleetForm(initialData));
   const [errors, setErrors] = useState({});
 
   if (!isOpen) return null;
@@ -222,15 +190,26 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
       errors[field] ? "border-red-500" : "border-[#dbe3e9]"
     }`;
 
-  const preview = calculateFleetValues(form.vessel, form.month, form.year);
+  const selectedKapal = kapalOptions.find((item) => item.value === form.kapal_id);
+  const preview = calculateFleetValues(form);
 
   function updateField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+
+      if (field === "kapal_id") {
+        const kapal = kapalOptions.find((item) => item.value === value);
+        next.tipeKapal = kapal?.tipe_kapal || next.tipeKapal;
+        next.area = matchOptionValue(AREA_OPTIONS, kapal?.area || next.area);
+      }
+
+      return next;
+    });
     setErrors((prev) => ({ ...prev, [field]: false }));
   }
 
   function handleSave() {
-    const requiredFields = ["vessel", "year", "month", "area"];
+    const requiredFields = ["kapal_id", "tahun", "bulan", "area", "tipeKapal", "avgNoOfCrews"];
     const nextErrors = {};
 
     requiredFields.forEach((field) => {
@@ -244,9 +223,12 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
 
     onSave({
       ...form,
-      id: form.id || nextId,
-      year: Number(form.year),
-      ...preview,
+      tahun: Number(form.tahun),
+      avgNoOfCrews: Number(form.avgNoOfCrews),
+      standardCrew: form.standardCrew === "" ? null : Number(form.standardCrew),
+      allowancePercent: form.allowancePercent === "" ? null : Number(form.allowancePercent),
+      daysInMonth: Number(preview.days),
+      manhours: Number(form.manhours || preview.manhours),
     });
   }
 
@@ -269,7 +251,7 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
                 {isEdit ? "Edit Fleet Manhours" : "Tambah Fleet Manhours"}
               </h2>
               <p className="mt-1 text-[12px] text-[#6d7b87]">
-                Standard crew, days, dan manhours ditampilkan sebagai simulasi auto calculation UI.
+                Data akan disimpan langsung ke Supabase.
               </p>
             </div>
             <button
@@ -282,40 +264,37 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
         </div>
 
         <div className="grid gap-4 px-6 py-5 md:grid-cols-2">
-          <FormField label="No Manhours">
-            <input readOnly value={form.id || nextId} className={`${inputClass("id")} bg-[#f7faf8] text-[#8a97a2]`} />
-          </FormField>
-
-          <FormField label="Kapal" req error={errors.vessel}>
+         
+          <FormField label="Kapal" req error={errors.kapal_id}>
             <select
-              className={inputClass("vessel")}
-              value={form.vessel}
-              onChange={(event) => updateField("vessel", event.target.value)}
+              className={inputClass("kapal_id")}
+              value={form.kapal_id}
+              onChange={(event) => updateField("kapal_id", event.target.value)}
             >
               <option value="">-- Pilih Kapal --</option>
-              {VESSEL_OPTIONS.map((item) => (
-                <option key={item.name} value={item.name}>
-                  {item.name} ({item.type})
+              {kapalOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>
           </FormField>
 
-          <FormField label="Tahun" req error={errors.year}>
+          <FormField label="Tahun" req error={errors.tahun}>
             <input
               type="number"
               min="2020"
-              className={inputClass("year")}
-              value={form.year}
-              onChange={(event) => updateField("year", event.target.value)}
+              className={inputClass("tahun")}
+              value={form.tahun}
+              onChange={(event) => updateField("tahun", event.target.value)}
             />
           </FormField>
 
-          <FormField label="Bulan" req error={errors.month}>
+          <FormField label="Bulan" req error={errors.bulan}>
             <select
-              className={inputClass("month")}
-              value={form.month}
-              onChange={(event) => updateField("month", event.target.value)}
+              className={inputClass("bulan")}
+              value={form.bulan}
+              onChange={(event) => updateField("bulan", event.target.value)}
             >
               {MONTH_OPTIONS.map((month) => (
                 <option key={month} value={month}>
@@ -333,11 +312,56 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
             >
               <option value="">-- Pilih Area --</option>
               {AREA_OPTIONS.map((area) => (
-                <option key={area} value={area}>
-                  {area}
+                <option key={area.value} value={area.value}>
+                  {area.label}
                 </option>
               ))}
             </select>
+          </FormField>
+
+          <FormField label="Tipe Kapal" req error={errors.tipeKapal}>
+            <select
+              className={inputClass("tipeKapal")}
+              value={form.tipeKapal}
+              onChange={(event) => updateField("tipeKapal", event.target.value)}
+            >
+              <option value="">-- Pilih Tipe --</option>
+              {MANHOURS_TIPE_KAPAL_OPTIONS.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="Avg No of Crews" req error={errors.avgNoOfCrews}>
+            <input
+              type="number"
+              min="0"
+              className={inputClass("avgNoOfCrews")}
+              value={form.avgNoOfCrews}
+              onChange={(event) => updateField("avgNoOfCrews", event.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Standard Crew">
+            <input
+              type="number"
+              min="0"
+              className={inputClass("standardCrew")}
+              value={form.standardCrew}
+              onChange={(event) => updateField("standardCrew", event.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Allowance %">
+            <input
+              type="number"
+              min="0"
+              className={inputClass("allowancePercent")}
+              value={form.allowancePercent}
+              onChange={(event) => updateField("allowancePercent", event.target.value)}
+            />
           </FormField>
 
           <div className="rounded-[16px] border border-emerald-100 bg-emerald-50/60 p-4">
@@ -347,11 +371,11 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
             <div className="mt-3 grid grid-cols-2 gap-3 text-[12px] text-[#385347]">
               <div>
                 <p className="text-[#6a7b72]">Tipe Kapal</p>
-                <p className="mt-1 font-semibold text-[#153428]">{preview.vesselType}</p>
+                <p className="mt-1 font-semibold text-[#153428]">{form.tipeKapal || selectedKapal?.tipe_kapal || "-"}</p>
               </div>
               <div>
-                <p className="text-[#6a7b72]">Standard Crew</p>
-                <p className="mt-1 font-semibold text-[#153428]">{preview.standardCrew || 0}</p>
+                <p className="text-[#6a7b72]">Avg Crew</p>
+                <p className="mt-1 font-semibold text-[#153428]">{form.avgNoOfCrews || 0}</p>
               </div>
               <div>
                 <p className="text-[#6a7b72]">Days</p>
@@ -368,9 +392,9 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
             <FormField label="Keterangan">
               <textarea
                 rows={4}
-                className={`${inputClass("description")} resize-y`}
-                value={form.description}
-                onChange={(event) => updateField("description", event.target.value)}
+                className={`${inputClass("keterangan")} resize-y`}
+                value={form.keterangan}
+                onChange={(event) => updateField("keterangan", event.target.value)}
                 placeholder="Tambahkan catatan operasional atau kondisi khusus."
               />
             </FormField>
@@ -380,15 +404,17 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
         <div className="flex items-center justify-end gap-3 border-t border-[#edf2ef] px-6 py-4">
           <button
             onClick={onClose}
+            disabled={isSaving}
             className="rounded-[10px] border border-[#d9e2e7] px-4 py-2.5 text-[13px] font-semibold text-[#566472] hover:bg-[#f8fafb]"
           >
             Batal
           </button>
           <button
             onClick={handleSave}
-            className="rounded-[10px] bg-emerald-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-emerald-700"
+            disabled={isSaving}
+            className="rounded-[10px] bg-emerald-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
           >
-            Simpan
+            {isSaving ? "Menyimpan..." : "Simpan"}
           </button>
         </div>
       </div>
@@ -396,8 +422,8 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
   );
 }
 
-function ShoreFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }) {
-  const [form, setForm] = useState(initialData || { ...EMPTY_SHORE_FORM, id: nextId });
+function ShoreFormModal({ isOpen, onClose, onSave, initialData, isEdit, isSaving }) {
+  const [form, setForm] = useState(toShoreForm(initialData));
   const [errors, setErrors] = useState({});
 
   if (!isOpen) return null;
@@ -413,7 +439,7 @@ function ShoreFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
   }
 
   function handleSave() {
-    const requiredFields = ["year", "month", "category", "peopleCount"];
+    const requiredFields = ["tahun", "bulan", "kategori", "jumlahOrang"];
     const nextErrors = {};
 
     requiredFields.forEach((field) => {
@@ -427,9 +453,8 @@ function ShoreFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
 
     onSave({
       ...form,
-      id: form.id || nextId,
-      year: Number(form.year),
-      peopleCount: Number(form.peopleCount),
+      tahun: Number(form.tahun),
+      jumlahOrang: Number(form.jumlahOrang),
     });
   }
 
@@ -465,56 +490,54 @@ function ShoreFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
         </div>
 
         <div className="grid gap-4 px-6 py-5 md:grid-cols-2">
-          <FormField label="No Record">
-            <input readOnly value={form.id || nextId} className={`${inputClass("id")} bg-[#f7faf8] text-[#8a97a2]`} />
-          </FormField>
+        
 
-          <FormField label="Tahun" req error={errors.year}>
+          <FormField label="Tahun" req error={errors.tahun}>
             <input
               type="number"
               min="2020"
-              className={inputClass("year")}
-              value={form.year}
-              onChange={(event) => updateField("year", event.target.value)}
+              className={inputClass("tahun")}
+              value={form.tahun}
+              onChange={(event) => updateField("tahun", event.target.value)}
             />
           </FormField>
 
-          <FormField label="Bulan" req error={errors.month}>
+          <FormField label="Bulan" req error={errors.bulan}>
             <select
-              className={inputClass("month")}
-              value={form.month}
-              onChange={(event) => updateField("month", event.target.value)}
+              className={inputClass("bulan")}
+              value={form.bulan}
+              onChange={(event) => updateField("bulan", event.target.value)}
             >
-              {MONTH_OPTIONS.map((month) => (
-                <option key={month} value={month}>
-                  {month}
+              {MANPOWER_MONTH_OPTIONS.map((month) => (
+                <option key={month.value} value={month.label}>
+                  {month.label}
                 </option>
               ))}
             </select>
           </FormField>
 
-          <FormField label="Kategori" req error={errors.category}>
+          <FormField label="Kategori" req error={errors.kategori}>
             <select
-              className={inputClass("category")}
-              value={form.category}
-              onChange={(event) => updateField("category", event.target.value)}
+              className={inputClass("kategori")}
+              value={form.kategori}
+              onChange={(event) => updateField("kategori", event.target.value)}
             >
               <option value="">-- Pilih Kategori --</option>
-              {SHORE_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+              {MANPOWER_CATEGORY_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+              </option>
               ))}
             </select>
           </FormField>
 
-          <FormField label="Jumlah Orang" req error={errors.peopleCount}>
+          <FormField label="Jumlah Orang" req error={errors.jumlahOrang}>
             <input
               type="number"
               min="0"
-              className={inputClass("peopleCount")}
-              value={form.peopleCount}
-              onChange={(event) => updateField("peopleCount", event.target.value)}
+              className={inputClass("jumlahOrang")}
+              value={form.jumlahOrang}
+              onChange={(event) => updateField("jumlahOrang", event.target.value)}
             />
           </FormField>
 
@@ -523,7 +546,7 @@ function ShoreFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
               Summary
             </p>
             <p className="mt-2 text-[22px] font-bold leading-none text-[#153428]">
-              {formatNumber(form.peopleCount || 0)}
+              {formatNumber(form.jumlahOrang || 0)}
             </p>
             <p className="mt-2 text-[12px] text-[#72808c]">Jumlah manpower untuk record periode ini.</p>
           </div>
@@ -532,9 +555,9 @@ function ShoreFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
             <FormField label="Keterangan">
               <textarea
                 rows={4}
-                className={`${inputClass("description")} resize-y`}
-                value={form.description}
-                onChange={(event) => updateField("description", event.target.value)}
+                className={`${inputClass("keterangan")} resize-y`}
+                value={form.keterangan}
+                onChange={(event) => updateField("keterangan", event.target.value)}
                 placeholder="Tambahkan catatan kebutuhan manpower."
               />
             </FormField>
@@ -544,15 +567,17 @@ function ShoreFormModal({ isOpen, onClose, onSave, initialData, nextId, isEdit }
         <div className="flex items-center justify-end gap-3 border-t border-[#edf2ef] px-6 py-4">
           <button
             onClick={onClose}
+            disabled={isSaving}
             className="rounded-[10px] border border-[#d9e2e7] px-4 py-2.5 text-[13px] font-semibold text-[#566472] hover:bg-[#f8fafb]"
           >
             Batal
           </button>
           <button
             onClick={handleSave}
-            className="rounded-[10px] bg-emerald-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-emerald-700"
+            disabled={isSaving}
+            className="rounded-[10px] bg-emerald-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
           >
-            Simpan
+            {isSaving ? "Menyimpan..." : "Simpan"}
           </button>
         </div>
       </div>
@@ -567,23 +592,25 @@ function DetailModal({ item, type, onClose }) {
     type === "fleet"
       ? [
           ["No Manhours", item.id],
-          ["Kapal", item.vessel],
-          ["Tahun", item.year],
-          ["Bulan", item.month],
+          ["Kapal", item.kapal],
+          ["Tahun", item.tahun],
+          ["Bulan", item.bulan],
           ["Area", item.area],
-          ["Tipe Kapal", item.vesselType],
+          ["Tipe Kapal", item.tipeKapal],
+          ["Avg No of Crews", item.avgNoOfCrews],
           ["Standard Crew", item.standardCrew],
-          ["Days", item.days],
+          ["Allowance %", item.allowancePercent],
+          ["Days", item.daysInMonth],
           ["Manhours", formatNumber(item.manhours)],
-          ["Keterangan", item.description || "-"],
+          ["Keterangan", item.keterangan || "-"],
         ]
       : [
           ["No Record", item.id],
-          ["Tahun", item.year],
-          ["Bulan", item.month],
-          ["Kategori", item.category],
-          ["Jumlah Orang", formatNumber(item.peopleCount)],
-          ["Keterangan", item.description || "-"],
+          ["Tahun", item.tahun],
+          ["Bulan", item.bulan],
+          ["Kategori", item.kategori],
+          ["Jumlah Orang", formatNumber(item.jumlahOrang)],
+          ["Keterangan", item.keterangan || "-"],
         ];
 
   return (
@@ -635,7 +662,7 @@ function DetailModal({ item, type, onClose }) {
   );
 }
 
-function DeleteModal({ open, title, targetId, onCancel, onConfirm }) {
+function DeleteModal({ open, title, targetId, onCancel, onConfirm, isDeleting }) {
   if (!open) return null;
 
   return (
@@ -648,20 +675,22 @@ function DeleteModal({ open, title, targetId, onCancel, onConfirm }) {
       <div className="w-full max-w-[420px] rounded-[22px] border border-[#dfe8e1] bg-white p-6 shadow-[0_28px_70px_rgba(15,23,42,0.24)]">
         <h3 className="text-[20px] font-bold text-[#153428]">Hapus Data</h3>
         <p className="mt-2 text-[13px] leading-6 text-[#667581]">
-          {title} dengan ID <span className="font-semibold text-[#243041]">{targetId}</span> akan dihapus dari local state.
+          {title} dengan ID <span className="font-semibold text-[#243041]">{targetId}</span> akan dihapus dari Supabase.
         </p>
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             onClick={onCancel}
+            disabled={isDeleting}
             className="rounded-[10px] border border-[#d9e2e7] px-4 py-2.5 text-[13px] font-semibold text-[#566472] hover:bg-[#f8fafb]"
           >
             Batal
           </button>
           <button
             onClick={onConfirm}
-            className="rounded-[10px] bg-red-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-red-700"
+            disabled={isDeleting}
+            className="rounded-[10px] bg-red-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-red-700 disabled:opacity-70"
           >
-            Hapus
+            {isDeleting ? "Menghapus..." : "Hapus"}
           </button>
         </div>
       </div>
@@ -671,8 +700,13 @@ function DeleteModal({ open, title, targetId, onCancel, onConfirm }) {
 
 export default function ManhoursPage() {
   const [activeTab, setActiveTab] = useState("fleet");
-  const [fleetData, setFleetData] = useState(FLEET_INITIAL_DATA);
-  const [shoreData, setShoreData] = useState(SHORE_INITIAL_DATA);
+  const [fleetData, setFleetData] = useState([]);
+  const [shoreData, setShoreData] = useState([]);
+  const [kapalOptions, setKapalOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [fleetModalOpen, setFleetModalOpen] = useState(false);
   const [shoreModalOpen, setShoreModalOpen] = useState(false);
   const [editingFleet, setEditingFleet] = useState(null);
@@ -680,28 +714,44 @@ export default function ManhoursPage() {
   const [detailState, setDetailState] = useState(null);
   const [deleteState, setDeleteState] = useState(null);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    Promise.all([getManhoursList(), getManpowerList(), getKapalOptions()])
+      .then(([manhours, manpower, kapal]) => {
+        if (!isMounted) return;
+        setFleetData(manhours);
+        setShoreData(manpower);
+        setKapalOptions(kapal);
+        setErrorMessage("");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil data manhours dan manpower.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const totalManhours = useMemo(
     () => fleetData.reduce((sum, item) => sum + Number(item.manhours || 0), 0),
     [fleetData]
   );
   const totalFleetManpower = useMemo(
-    () => fleetData.reduce((sum, item) => sum + Number(item.standardCrew || 0), 0),
+    () => fleetData.reduce((sum, item) => sum + Number(item.avgNoOfCrews || item.standardCrew || 0), 0),
     [fleetData]
   );
   const totalShoreManpower = useMemo(
-    () => shoreData.reduce((sum, item) => sum + Number(item.peopleCount || 0), 0),
+    () => shoreData.reduce((sum, item) => sum + Number(item.jumlahOrang || 0), 0),
     [shoreData]
   );
   const totalAllManpower = totalFleetManpower + totalShoreManpower;
-
-  const nextFleetId = useMemo(
-    () => generateRunningId(fleetData, "MH", new Date().getFullYear()),
-    [fleetData]
-  );
-  const nextShoreId = useMemo(
-    () => generateRunningId(shoreData, "MP", new Date().getFullYear()),
-    [shoreData]
-  );
 
   function openCreateFleet() {
     setEditingFleet(null);
@@ -713,38 +763,71 @@ export default function ManhoursPage() {
     setShoreModalOpen(true);
   }
 
-  function handleSaveFleet(data) {
-    if (editingFleet) {
-      setFleetData((prev) => prev.map((item) => (item.id === data.id ? data : item)));
-    } else {
-      setFleetData((prev) => [data, ...prev]);
-    }
+  async function handleSaveFleet(data) {
+    try {
+      setIsSaving(true);
+      setErrorMessage("");
 
-    setFleetModalOpen(false);
-    setEditingFleet(null);
+      if (editingFleet) {
+        const updated = await updateManhours(editingFleet.id, data);
+        setFleetData((prev) => prev.map((item) => (item.id === editingFleet.id ? updated : item)));
+      } else {
+        const created = await createManhours(data);
+        setFleetData((prev) => [created, ...prev]);
+      }
+
+      setFleetModalOpen(false);
+      setEditingFleet(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menyimpan data manhours.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleSaveShore(data) {
-    if (editingShore) {
-      setShoreData((prev) => prev.map((item) => (item.id === data.id ? data : item)));
-    } else {
-      setShoreData((prev) => [data, ...prev]);
-    }
+  async function handleSaveShore(data) {
+    try {
+      setIsSaving(true);
+      setErrorMessage("");
 
-    setShoreModalOpen(false);
-    setEditingShore(null);
+      if (editingShore) {
+        const updated = await updateManpower(editingShore.id, data);
+        setShoreData((prev) => prev.map((item) => (item.id === editingShore.id ? updated : item)));
+      } else {
+        const created = await createManpower(data);
+        setShoreData((prev) => [created, ...prev]);
+      }
+
+      setShoreModalOpen(false);
+      setEditingShore(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menyimpan data manpower.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!deleteState) return;
 
-    if (deleteState.type === "fleet") {
-      setFleetData((prev) => prev.filter((item) => item.id !== deleteState.item.id));
-    } else {
-      setShoreData((prev) => prev.filter((item) => item.id !== deleteState.item.id));
-    }
+    try {
+      setIsDeleting(true);
+      setErrorMessage("");
 
-    setDeleteState(null);
+      if (deleteState.type === "fleet") {
+        await deleteManhours(deleteState.item.id);
+        setFleetData((prev) => prev.filter((item) => item.id !== deleteState.item.id));
+      } else {
+        await deleteManpower(deleteState.item.id);
+        setShoreData((prev) => prev.filter((item) => item.id !== deleteState.item.id));
+      }
+
+      setDeleteState(null);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal menghapus data.");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (
@@ -842,11 +925,17 @@ export default function ManhoursPage() {
             <div>
               <h2 className="text-[16px] font-semibold text-[#243041]">Manhours Register</h2>
               <p className="mt-1 text-[12px] text-[#7a8692]">
-                Kelola data fleet manhours dan shore manpower dalam local state.
+                Kelola data fleet manhours dan shore manpower dari Supabase.
               </p>
             </div>
             <SegmentedButton activeTab={activeTab} onChange={setActiveTab} />
           </div>
+
+          {errorMessage ? (
+            <div className="mx-5 mt-4 rounded-[14px] border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+              {errorMessage}
+            </div>
+          ) : null}
 
           {activeTab === "fleet" ? (
             <div>
@@ -867,7 +956,11 @@ export default function ManhoursPage() {
               </div>
 
               <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 520 }}>
-                {fleetData.length === 0 ? (
+                {loading ? (
+                  <div className="px-5 py-12 text-center text-[13px] text-[#98a4ae]">
+                    Mengambil data fleet manhours...
+                  </div>
+                ) : fleetData.length === 0 ? (
                   <div className="px-5 py-12 text-center text-[13px] text-[#98a4ae]">
                     Belum ada data fleet manhours.
                   </div>
@@ -901,22 +994,22 @@ export default function ManhoursPage() {
                       {fleetData.map((item) => (
                         <tr key={item.id} className="border-b border-[#f0f3f5] hover:bg-[#fbfdfc]">
                           <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#4c5b67]">{item.id}</td>
-                          <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#243041]">{item.vessel}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.year}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.month}</td>
+                          <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#243041]">{item.kapal}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.tahun}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.bulan}</td>
                           <td className="whitespace-nowrap px-3 py-3">
                             <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700">
                               {item.area}
                             </span>
                           </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.vesselType}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.standardCrew}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.days}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.tipeKapal}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.standardCrew || item.avgNoOfCrews}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.daysInMonth}</td>
                           <td className="whitespace-nowrap px-3 py-3 font-semibold text-emerald-700">
                             {formatNumber(item.manhours)}
                           </td>
                           <td className="max-w-[260px] px-3 py-3 text-[#667581]">
-                            <p className="line-clamp-2">{item.description || "-"}</p>
+                            <p className="line-clamp-2">{item.keterangan || "-"}</p>
                           </td>
                           <td className="whitespace-nowrap px-3 py-3">
                             <div className="flex flex-wrap gap-1.5">
@@ -972,7 +1065,11 @@ export default function ManhoursPage() {
               </div>
 
               <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 520 }}>
-                {shoreData.length === 0 ? (
+                {loading ? (
+                  <div className="px-5 py-12 text-center text-[13px] text-[#98a4ae]">
+                    Mengambil data shore manpower...
+                  </div>
+                ) : shoreData.length === 0 ? (
                   <div className="px-5 py-12 text-center text-[13px] text-[#98a4ae]">
                     Belum ada data shore manpower.
                   </div>
@@ -994,14 +1091,14 @@ export default function ManhoursPage() {
                       {shoreData.map((item) => (
                         <tr key={item.id} className="border-b border-[#f0f3f5] hover:bg-[#fbfdfc]">
                           <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#4c5b67]">{item.id}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.year}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.month}</td>
-                          <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#243041]">{item.category}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.tahun}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-[#4c5b67]">{item.bulan}</td>
+                          <td className="whitespace-nowrap px-3 py-3 font-semibold text-[#243041]">{item.kategori}</td>
                           <td className="whitespace-nowrap px-3 py-3 font-semibold text-emerald-700">
-                            {formatNumber(item.peopleCount)}
+                            {formatNumber(item.jumlahOrang)}
                           </td>
                           <td className="max-w-[280px] px-3 py-3 text-[#667581]">
-                            <p className="line-clamp-2">{item.description || "-"}</p>
+                            <p className="line-clamp-2">{item.keterangan || "-"}</p>
                           </td>
                           <td className="whitespace-nowrap px-3 py-3">
                             <div className="flex flex-wrap gap-1.5">
@@ -1044,7 +1141,7 @@ export default function ManhoursPage() {
 
       {fleetModalOpen ? (
         <FleetFormModal
-          key={editingFleet?.id || nextFleetId}
+          key={editingFleet?.id || "create-fleet"}
           isOpen={fleetModalOpen}
           onClose={() => {
             setFleetModalOpen(false);
@@ -1052,14 +1149,15 @@ export default function ManhoursPage() {
           }}
           onSave={handleSaveFleet}
           initialData={editingFleet}
-          nextId={nextFleetId}
           isEdit={!!editingFleet}
+          kapalOptions={kapalOptions}
+          isSaving={isSaving}
         />
       ) : null}
 
       {shoreModalOpen ? (
         <ShoreFormModal
-          key={editingShore?.id || nextShoreId}
+          key={editingShore?.id || "create-shore"}
           isOpen={shoreModalOpen}
           onClose={() => {
             setShoreModalOpen(false);
@@ -1067,8 +1165,8 @@ export default function ManhoursPage() {
           }}
           onSave={handleSaveShore}
           initialData={editingShore}
-          nextId={nextShoreId}
           isEdit={!!editingShore}
+          isSaving={isSaving}
         />
       ) : null}
 
@@ -1084,6 +1182,7 @@ export default function ManhoursPage() {
         targetId={deleteState?.item?.id}
         onCancel={() => setDeleteState(null)}
         onConfirm={handleDelete}
+        isDeleting={isDeleting}
       />
     </div>
   );

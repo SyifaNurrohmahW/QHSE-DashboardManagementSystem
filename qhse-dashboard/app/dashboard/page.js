@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -22,178 +21,16 @@ import {
   Zap,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getHazardReports } from "@/lib/services/hazardService";
+import { getIncidentList } from "@/lib/services/incidentService";
+import { getLsaFfaList } from "@/lib/services/lsaFfaService";
+import { getNcrList } from "@/lib/services/ncrService";
+import { getMonthlyReportView } from "@/lib/services/monthlyReport";
+import { getSecurityRecords } from "@/lib/services/securityService";
+import { getStfVirList } from "@/lib/services/stfVirService";
+import { INCIDENT_CATEGORY_OPTIONS } from "@/constants/incidentOptions";
 
 const BULAN_OPTIONS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-
-const MONTH_LABELS = [
-  "Januari",
-  "Februari",
-  "Maret",
-  "April",
-  "Mei",
-  "Juni",
-  "Juli",
-  "Agustus",
-  "September",
-  "Oktober",
-  "November",
-  "Desember",
-];
-
-const summaryStats = [
-  {
-    title: "Total Record QHSE",
-    value: "162",
-    note: "Akumulasi seluruh modul bulan aktif",
-    icon: FileSpreadsheet,
-    tone: "bg-[#edf9f1] text-[#1f9b58]",
-  },
-  {
-    title: "Open Follow Up",
-    value: "27",
-    note: "Perlu review dan tindak lanjut",
-    icon: AlertTriangle,
-    tone: "bg-[#fff7e8] text-[#c98431]",
-  },
-  {
-    title: "Close Rate",
-    value: "83%",
-    note: "Rasio close lintas modul",
-    icon: CheckCircle2,
-    tone: "bg-[#eef4ff] text-[#376ad6]",
-  },
-  {
-    title: "Due This Week",
-    value: "11",
-    note: "Agenda verifikasi terdekat",
-    icon: BellRing,
-    tone: "bg-[#fff0f0] text-[#c53030]",
-  },
-];
-
-const moduleRows = [
-  {
-    title: "Incident Report",
-    icon: AlertTriangle,
-    total: 24,
-    open: 6,
-    closed: 18,
-    trend: "+5",
-    color: "#c84f58",
-    note: "Near miss dan insiden operasional",
-  },
-  {
-    title: "Hazard Report",
-    icon: BadgeAlert,
-    total: 31,
-    open: 9,
-    closed: 22,
-    trend: "+4",
-    color: "#cf7b2e",
-    note: "Unsafe action & unsafe condition",
-  },
-  {
-    title: "Manhours",
-    icon: Timer,
-    total: 12840,
-    open: 0,
-    closed: 0,
-    trend: "+860",
-    color: "#376ad6",
-    note: "Akumulasi jam kerja bulanan",
-    isManhours: true,
-  },
-  {
-    title: "NCR",
-    icon: ClipboardList,
-    total: 14,
-    open: 5,
-    closed: 9,
-    trend: "+2",
-    color: "#b8434d",
-    note: "Temuan audit dan corrective action",
-  },
-  {
-    title: "LSA & FFA",
-    icon: LifeBuoy,
-    total: 48,
-    open: 7,
-    closed: 41,
-    trend: "+3",
-    color: "#1f9b58",
-    note: "Expiry control dan replacement plan",
-  },
-  {
-    title: "STF & VIR",
-    icon: ScanSearch,
-    total: 19,
-    open: 4,
-    closed: 15,
-    trend: "+1",
-    color: "#6b7280",
-    note: "Checklist dan vessel inspection report",
-  },
-  {
-    title: "Security Record",
-    icon: ShieldCheck,
-    total: 26,
-    open: 8,
-    closed: 18,
-    trend: "+6",
-    color: "#2f63ce",
-    note: "Monitoring security event",
-  },
-];
-
-const manhoursTrend = [
-  { month: "Jan", monthIndex: 1, year: 2026, target: 10800, actual: 10240, manpower: 96 },
-  { month: "Feb", monthIndex: 2, year: 2026, target: 11200, actual: 10980, manpower: 101 },
-  { month: "Mar", monthIndex: 3, year: 2026, target: 11800, actual: 11560, manpower: 108 },
-  { month: "Apr", monthIndex: 4, year: 2026, target: 13000, actual: 12840, manpower: 114 },
-];
-
-const lsaEquipmentData = [
-  {
-    equipment: "PMK",
-    totalUnits: 15,
-    sudahService: 9,
-    belumService: 4,
-    memasukiService: 2,
-    diturunkan: 6,
-    belumTurun: 9,
-    monthlyCounts: [0, 0, 0, 0, 0, 6, 4, 3, 4, 4, 1, 4],
-  },
-  {
-    equipment: "ILR",
-    totalUnits: 8,
-    sudahService: 5,
-    belumService: 2,
-    memasukiService: 1,
-    diturunkan: 4,
-    belumTurun: 4,
-    monthlyCounts: [0, 0, 0, 0, 0, 10, 5, 3, 4, 0, 0, 4],
-  },
-  {
-    equipment: "EPIRB",
-    totalUnits: 6,
-    sudahService: 4,
-    belumService: 1,
-    memasukiService: 1,
-    diturunkan: 2,
-    belumTurun: 4,
-    monthlyCounts: [0, 0, 1, 0, 0, 2, 1, 0, 1, 0, 0, 1],
-  },
-  {
-    equipment: "HRU",
-    totalUnits: 10,
-    sudahService: 8,
-    belumService: 1,
-    memasukiService: 1,
-    diturunkan: 5,
-    belumTurun: 5,
-    monthlyCounts: [2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
-  },
-];
 
 const lsaEquipmentIcons = {
   PMK: Flame,
@@ -204,58 +41,204 @@ const lsaEquipmentIcons = {
   "SCBA/EEBD": ShieldOff,
 };
 
-const vesselSummary = [
-  { vessel: "MV Adaro Pioneer", incident: 4, hazard: 6, ncr: 3, security: 2, open: 5 },
-  { vessel: "MV South Borneo", incident: 3, hazard: 5, ncr: 2, security: 1, open: 3 },
-  { vessel: "MV Energi Nusantara", incident: 5, hazard: 4, ncr: 4, security: 3, open: 6 },
-  { vessel: "MV Adaro Maritim", incident: 2, hazard: 3, ncr: 1, security: 2, open: 2 },
-];
-
-const ncrWorkbookData = {
+const EMPTY_NCR_WORKBOOK = {
   title: "NCR Record",
   categories: [
     { label: "SEC. A", value: 0 },
     { label: "SEC. B", value: 0 },
     { label: "COMP. SEC B", value: 0 },
-    { label: "CLOSED", value: 7 },
+    { label: "CLOSED", value: 0 },
   ],
-  open: 5,
-  closed: 9,
+  open: 0,
+  closed: 0,
   donuts: [
     { value: 0, color: "#f59e0b" },
     { value: 0, color: "#f59e0b" },
     { value: 0, color: "#f59e0b" },
-    { value: 64, color: "#4c76c9" },
+    { value: 0, color: "#4c76c9" },
   ],
 };
 
-const incidentWorkbookData = {
+const EMPTY_INCIDENT_WORKBOOK = {
   title: "Incident Record",
-  labels: ["FA", "MTI", "LTI", "Grounded", "Collision", "Machinery", "Nearmiss", "Other"],
-  values: [0, 0, 0, 0, 0, 0, 0, 0],
+  labels: [...INCIDENT_CATEGORY_OPTIONS, "Lainnya"],
+  values: Array(INCIDENT_CATEGORY_OPTIONS.length + 1).fill(0),
 };
 
-const securityWorkbookData = {
+const EMPTY_SECURITY_WORKBOOK = {
   title: "Security Record",
-  monthly: [0, 0, 2, 0, 2, 0, 0, 0, 0, 1, 1, 0],
+  monthly: Array(12).fill(0),
 };
 
-const hazardWorkbookData = {
+const EMPTY_HAZARD_WORKBOOK = {
   title: "Hazard Report",
-  vessels: ["MBP 146", "MBP 143", "MBP 141", "MBP 139", "MBP 136", "MBP 132", "MBP 130", "MBP 135", "MBP 126", "MBP 123", "MBP 121"],
-  target: 2026,
-  received: 22,
-  progress: 78,
+  vessels: [],
+  target: 0,
+  received: 0,
+  progress: 0,
 };
 
-const stfVirWorkbookData = {
+const EMPTY_STF_VIR_WORKBOOK = {
   title: "STF & VIR",
-  monthly: [1, 0, 0, 0, 1, 1, 2, 1, 0, 0, 1, 0],
-  target: 2026,
-  kapal: 19,
-  sudah: 15,
-  belum: 4,
+  monthly: Array(12).fill(0),
+  target: 0,
+  kapal: 0,
+  sudah: 0,
+  belum: 0,
 };
+
+function isClosedStatus(status) {
+  return ["closed", "close", "selesai", "done"].includes(String(status || "").toLowerCase());
+}
+
+function getMonthIndexFromDate(dateString) {
+  if (!dateString) return -1;
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return -1;
+  return date.getMonth();
+}
+
+function dateDiffInDays(date) {
+  if (!date) return null;
+  const today = new Date();
+  const target = new Date(date);
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+}
+
+function buildMonthlyTrend(monthlyReports) {
+  return monthlyReports
+    .slice()
+    .sort((a, b) => a.bulanNumber - b.bulanNumber)
+    .map((item) => ({
+      month: BULAN_OPTIONS[(item.bulanNumber || 1) - 1] || item.bulan,
+      target: Number(item.totalManhours || 0),
+      actual: Number(item.totalManhours || 0),
+      manpower: Number(item.totalManpowerAll || 0),
+      hazard: Number(item.totalHazardReport || 0),
+      stfVir: Number(item.totalStfVir || 0),
+      security: Number(item.totalSecurityRecord || 0),
+    }));
+}
+
+function buildLsaEquipmentData(items) {
+  const grouped = new Map();
+
+  items.forEach((item) => {
+    const name = item.jenisEquipment || "Unknown";
+    const current = grouped.get(name) || {
+      equipment: name,
+      totalUnits: 0,
+      sudahService: 0,
+      belumService: 0,
+      memasukiService: 0,
+      diturunkan: 0,
+      belumTurun: 0,
+      monthlyCounts: Array(12).fill(0),
+    };
+
+    const qty = Number(item.qty || 1) || 1;
+    const status = String(item.status || "").toLowerCase();
+    const remainingDays = dateDiffInDays(item.nextInspectionDate);
+    const monthIndex = getMonthIndexFromDate(item.nextInspectionDate);
+
+    current.totalUnits += qty;
+    if (status === "sudah") current.sudahService += qty;
+    else if (status === "belum") current.belumService += qty;
+    else if (status === "expired" || (remainingDays !== null && remainingDays <= Number(item.alertDays || 60))) current.memasukiService += qty;
+    else current.belumService += qty;
+
+    if (status === "sudah") current.diturunkan += qty;
+    else current.belumTurun += qty;
+
+    if (monthIndex >= 0) current.monthlyCounts[monthIndex] += qty;
+    grouped.set(name, current);
+  });
+
+  return Array.from(grouped.values());
+}
+
+function buildWorkbookData({ incidents, hazards, ncrs, securityRecords, stfVirRecords }) {
+  const ncrClosed = ncrs.filter((item) => isClosedStatus(item.status)).length;
+  const ncrOpen = Math.max(0, ncrs.length - ncrClosed);
+  const sectionCounts = ["SEC. A", "SEC. B", "COMP. SEC B"].map((section) => ({
+    label: section,
+    value: ncrs.filter((item) => String(item.section || "").toUpperCase() === section).length,
+  }));
+  const ncrTotal = Math.max(1, ncrs.length);
+
+  const incidentLabels = EMPTY_INCIDENT_WORKBOOK.labels;
+  const knownIncidentCategories = new Set(INCIDENT_CATEGORY_OPTIONS.map((item) => item.toLowerCase()));
+  const incidentValues = incidentLabels.map((label) => {
+    if (label === "Lainnya") {
+      return incidents.filter((item) => !knownIncidentCategories.has(String(item.category || "").toLowerCase())).length;
+    }
+
+    return incidents.filter((item) => String(item.category || "").toLowerCase() === label.toLowerCase()).length;
+  });
+
+  const securityMonthly = Array(12).fill(0);
+  securityRecords.forEach((item) => {
+    const index = Number(item.bulanNumber || 0) - 1;
+    if (index >= 0) securityMonthly[index] += 1;
+  });
+
+  const vesselHazards = hazards.reduce((acc, item) => {
+    const key = item.kapal || "-";
+    acc[key] = (acc[key] || 0) + Number(item.totalReport || 0);
+    return acc;
+  }, {});
+  const hazardTarget = hazards.reduce((sum, item) => sum + Number(item.target || 0), 0);
+  const hazardReceived = hazards.reduce((sum, item) => sum + Number(item.totalReport || 0), 0);
+
+  const stfMonthly = Array(12).fill(0);
+  stfVirRecords.forEach((item) => {
+    const index = Number(item.bulanNumber || 0) - 1;
+    if (index >= 0) stfMonthly[index] += Number(item.total || 0);
+  });
+  const stfTarget = stfVirRecords.reduce((sum, item) => sum + Number(item.target || 0), 0);
+  const stfDone = stfVirRecords.reduce((sum, item) => sum + Number(item.total || 0), 0);
+
+  return {
+    ncr: {
+      ...EMPTY_NCR_WORKBOOK,
+      categories: [...sectionCounts, { label: "CLOSED", value: ncrClosed }],
+      open: ncrOpen,
+      closed: ncrClosed,
+      donuts: [
+        ...sectionCounts.map((item) => ({ value: Math.round((item.value / ncrTotal) * 100), color: "#f59e0b" })),
+        { value: Math.round((ncrClosed / ncrTotal) * 100), color: "#4c76c9" },
+      ],
+    },
+    incident: {
+      ...EMPTY_INCIDENT_WORKBOOK,
+      values: incidentValues,
+    },
+    security: {
+      ...EMPTY_SECURITY_WORKBOOK,
+      monthly: securityMonthly,
+    },
+    hazard: {
+      ...EMPTY_HAZARD_WORKBOOK,
+      vessels: Object.entries(vesselHazards)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 11)
+        .map(([vessel]) => vessel),
+      target: hazardTarget,
+      received: hazardReceived,
+      progress: hazardTarget > 0 ? Math.min(100, Math.round((hazardReceived / hazardTarget) * 100)) : 0,
+    },
+    stfVir: {
+      ...EMPTY_STF_VIR_WORKBOOK,
+      monthly: stfMonthly,
+      target: stfTarget,
+      kapal: new Set(stfVirRecords.map((item) => item.kapal_id || item.kapal)).size,
+      sudah: stfDone,
+      belum: Math.max(0, stfTarget - stfDone),
+    },
+  };
+}
 
 function StatCard({ item }) {
   const Icon = item.icon;
@@ -314,14 +297,15 @@ function WorkbookPanelShell({ title, children, className = "" }) {
   );
 }
 
-function NcrWorkbookPanel() {
-  const max = Math.max(1, ...ncrWorkbookData.categories.map((item) => item.value));
+function NcrWorkbookPanel({ data }) {
+  const workbookData = data || EMPTY_NCR_WORKBOOK;
+  const max = Math.max(1, ...workbookData.categories.map((item) => item.value));
   return (
-    <WorkbookPanelShell title={ncrWorkbookData.title}>
+    <WorkbookPanelShell title={workbookData.title}>
       <div className="grid gap-2 p-2 lg:grid-cols-[1.05fr_1fr]">
         <div className="border border-[#9d7b00] bg-[#ffc928] p-3">
           <div className="grid h-[146px] grid-cols-4 items-end gap-3 border-b border-[#f7df8a] pb-2">
-            {ncrWorkbookData.categories.map((item) => {
+            {workbookData.categories.map((item) => {
               const height = item.value > 0 ? Math.max(12, (item.value / max) * 110) : 4;
               return (
                 <div key={item.label} className="flex h-full flex-col items-center justify-end">
@@ -338,13 +322,13 @@ function NcrWorkbookPanel() {
             <div className="border-b border-[#9d7b00] px-2 py-1 text-center text-[10px] font-bold uppercase text-[#2e2200]">Total NCR</div>
             <div className="grid grid-cols-[1fr_52px] text-[10px] font-semibold uppercase text-[#2e2200]">
               <span className="border-r border-b border-[#9d7b00] px-2 py-1">Open</span>
-              <span className="border-b border-[#9d7b00] px-2 py-1 text-center">{ncrWorkbookData.open}</span>
+              <span className="border-b border-[#9d7b00] px-2 py-1 text-center">{workbookData.open}</span>
               <span className="border-r border-[#9d7b00] px-2 py-1">Closed</span>
-              <span className="px-2 py-1 text-center">{ncrWorkbookData.closed}</span>
+              <span className="px-2 py-1 text-center">{workbookData.closed}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {ncrWorkbookData.donuts.map((item, index) => (
+            {workbookData.donuts.map((item, index) => (
               <div key={`ncr-donut-${index}`} className="flex items-center justify-center border border-[#9d7b00] bg-[#ffc928] py-2">
                 <WorkbookMiniDonut value={item.value} color={item.color} />
               </div>
@@ -356,40 +340,58 @@ function NcrWorkbookPanel() {
   );
 }
 
-function IncidentWorkbookPanel() {
-  const max = 1;
-  const points = incidentWorkbookData.values
+function IncidentWorkbookPanel({ data }) {
+  const workbookData = data || EMPTY_INCIDENT_WORKBOOK;
+  const max = Math.max(1, ...workbookData.values);
+  const plotLeft = 7;
+  const plotRight = 93;
+  const plotWidth = plotRight - plotLeft;
+  const plotBottom = 66;
+  const plotHeight = 48;
+  const getX = (index) => plotLeft + (index / (workbookData.values.length - 1 || 1)) * plotWidth;
+  const getY = (value) => plotBottom - (value / max) * plotHeight;
+  const points = workbookData.values
     .map((value, index) => {
-      const x = 8 + (index / (incidentWorkbookData.values.length - 1 || 1)) * 84;
-      const y = 72 - (value / max) * 54;
-      return `${x},${y}`;
+      return `${getX(index)},${getY(value)}`;
     })
     .join(" ");
   return (
-    <WorkbookPanelShell title={incidentWorkbookData.title}>
+    <WorkbookPanelShell title={workbookData.title}>
       <div className="p-2">
-        <div className="border border-[#9d7b00] bg-[#ffc928] p-3">
-          <svg viewBox="0 0 100 82" className="h-[176px] w-full">
-            {[18, 28, 38, 48, 58, 68].map((y) => (
-              <line key={y} x1="8" x2="94" y1={y} y2={y} stroke="#fef3c7" strokeWidth="0.8" />
+        <div className="border border-[#9d7b00] bg-[#ffc928] px-3 pb-5 pt-3">
+          <svg viewBox="0 0 100 96" className="h-[226px] w-full" preserveAspectRatio="none">
+            {[18, 28, 38, 48, 58, 66].map((y) => (
+              <line key={y} x1={plotLeft} x2={plotRight} y1={y} y2={y} stroke="#fef3c7" strokeWidth="0.8" />
             ))}
             <polyline fill="none" stroke="#4c76c9" strokeWidth="1.3" points={points} />
-            {incidentWorkbookData.values.map((value, index) => {
-              const x = 8 + (index / (incidentWorkbookData.values.length - 1 || 1)) * 84;
-              const y = 72 - (value / max) * 54;
+            {workbookData.values.map((value, index) => {
+              const x = getX(index);
+              const y = getY(value);
               return (
-                <g key={`${incidentWorkbookData.labels[index]}-${index}`}>
+                <g key={`${workbookData.labels[index]}-${index}`}>
                   <circle cx={x} cy={y} r="1.4" fill="#4c76c9" />
                   <text x={x} y={y - 2} textAnchor="middle" fontSize="4" fill="#2e2200">{value}</text>
                 </g>
               );
             })}
+            {workbookData.labels.map((label, index) => {
+              const x = getX(index);
+              return (
+                <text
+                  key={label}
+                  x={x}
+                  y="82"
+                  textAnchor="end"
+                  fontSize="2.6"
+                  fontWeight="700"
+                  fill="#5d4700"
+                  transform={`rotate(-18 ${x} 82)`}
+                >
+                  {label.toUpperCase()}
+                </text>
+              );
+            })}
           </svg>
-          <div className="mt-2 grid grid-cols-8 gap-1 text-center text-[8px] font-semibold uppercase text-[#5d4700]">
-            {incidentWorkbookData.labels.map((label) => (
-              <span key={label} className="-rotate-25">{label}</span>
-            ))}
-          </div>
         </div>
       </div>
     </WorkbookPanelShell>
@@ -397,16 +399,17 @@ function IncidentWorkbookPanel() {
 }
 
 function SecurityWorkbookPanel({ data }) {
-  const max = Math.max(1, ...data.monthly);
-  const points = data.monthly
+  const workbookData = data || EMPTY_SECURITY_WORKBOOK;
+  const max = Math.max(1, ...workbookData.monthly);
+  const points = workbookData.monthly
     .map((value, index) => {
-      const x = 8 + (index / (data.monthly.length - 1 || 1)) * 84;
+      const x = 8 + (index / (workbookData.monthly.length - 1 || 1)) * 84;
       const y = 72 - (value / max) * 54;
       return `${x},${y}`;
     })
     .join(" ");
   return (
-    <WorkbookPanelShell title={securityWorkbookData.title}>
+    <WorkbookPanelShell title={workbookData.title}>
       <div className="p-2">
         <div className="border border-[#9d7b00] bg-[#ffc928] p-3">
           <svg viewBox="0 0 100 82" className="h-[176px] w-full">
@@ -414,8 +417,8 @@ function SecurityWorkbookPanel({ data }) {
               <line key={y} x1="8" x2="94" y1={y} y2={y} stroke="#fef3c7" strokeWidth="0.8" />
             ))}
             <polyline fill="none" stroke="#4c76c9" strokeWidth="1.5" points={points} />
-            {data.monthly.map((value, index) => {
-              const x = 8 + (index / (data.monthly.length - 1 || 1)) * 84;
+            {workbookData.monthly.map((value, index) => {
+              const x = 8 + (index / (workbookData.monthly.length - 1 || 1)) * 84;
               const y = 72 - (value / max) * 54;
               return <circle key={`sec-${index}`} cx={x} cy={y} r="1.8" fill="#4c76c9" />;
             })}
@@ -431,13 +434,14 @@ function SecurityWorkbookPanel({ data }) {
   );
 }
 
-function HazardWorkbookPanel() {
+function HazardWorkbookPanel({ data }) {
+  const workbookData = data || EMPTY_HAZARD_WORKBOOK;
   return (
-    <WorkbookPanelShell title={hazardWorkbookData.title}>
+    <WorkbookPanelShell title={workbookData.title}>
       <div className="grid gap-2 p-2 lg:grid-cols-[1.3fr_0.9fr]">
         <div className="border border-[#9d7b00] bg-[#ffc928] p-3">
           <div className="space-y-2">
-            {hazardWorkbookData.vessels.map((vessel) => (
+            {workbookData.vessels.map((vessel) => (
               <div key={vessel} className="grid grid-cols-[72px_1fr] items-center gap-2">
                 <span className="text-[10px] font-semibold uppercase text-[#5d4700]">{vessel}</span>
                 <div className="h-1.5 bg-[#4c76c9]" />
@@ -448,10 +452,10 @@ function HazardWorkbookPanel() {
         <div className="space-y-2">
           <div className="border border-[#9d7b00] bg-[#ffc928]">
             <div className="grid grid-cols-[1fr_52px] text-[10px] font-semibold uppercase text-[#2e2200]">
-              <span className="border-r border-b border-[#9d7b00] px-2 py-1">Target {hazardWorkbookData.target}</span>
-              <span className="border-b border-[#9d7b00] px-2 py-1 text-center">{hazardWorkbookData.target}</span>
+              <span className="border-r border-b border-[#9d7b00] px-2 py-1">Target {workbookData.target}</span>
+              <span className="border-b border-[#9d7b00] px-2 py-1 text-center">{workbookData.target}</span>
               <span className="border-r border-[#9d7b00] px-2 py-1">Diterima</span>
-              <span className="px-2 py-1 text-center">{hazardWorkbookData.received}</span>
+              <span className="px-2 py-1 text-center">{workbookData.received}</span>
             </div>
           </div>
           <div className="border border-[#9d7b00] bg-[#ffc928] px-3 py-4">
@@ -467,7 +471,7 @@ function HazardWorkbookPanel() {
                     fill="none"
                     stroke="#4c76c9"
                     strokeWidth="5"
-                    strokeDasharray={`${hazardWorkbookData.progress} ${100 - hazardWorkbookData.progress}`}
+                    strokeDasharray={`${workbookData.progress} ${100 - workbookData.progress}`}
                     strokeDashoffset="25"
                   />
                 </svg>
@@ -481,13 +485,14 @@ function HazardWorkbookPanel() {
 }
 
 function StfVirWorkbookPanel({ data }) {
-  const max = Math.max(1, ...data.monthly);
+  const workbookData = data || EMPTY_STF_VIR_WORKBOOK;
+  const max = Math.max(1, ...workbookData.monthly);
   return (
-    <WorkbookPanelShell title={data.title}>
+    <WorkbookPanelShell title={workbookData.title}>
       <div className="grid gap-2 p-2 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="border border-[#9d7b00] bg-[#ffc928] px-3 pb-2 pt-4">
           <div className="grid h-[146px] grid-cols-12 items-end gap-2">
-            {data.monthly.map((count, index) => {
+            {workbookData.monthly.map((count, index) => {
               const height = count > 0 ? Math.max(10, (count / max) * 102) : 4;
               return (
                 <div key={`stf-${index}`} className="flex h-full flex-col items-center justify-end">
@@ -507,18 +512,18 @@ function StfVirWorkbookPanel({ data }) {
             <div className="grid grid-cols-2 text-[10px] font-semibold uppercase text-[#2e2200]">
               <span className="border-r border-b border-[#9d7b00] px-2 py-1">Target {data.target}</span>
               <span className="border-b border-[#9d7b00] px-2 py-1 text-center">Kapal</span>
-              <span className="border-r border-[#9d7b00] px-2 py-1 text-center">{data.target}</span>
-              <span className="px-2 py-1 text-center">{data.kapal}</span>
+              <span className="border-r border-[#9d7b00] px-2 py-1 text-center">{workbookData.target}</span>
+              <span className="px-2 py-1 text-center">{workbookData.kapal}</span>
             </div>
           </div>
           <div className="border border-[#9d7b00] bg-[#ffc928]">
             <div className="grid grid-cols-[1fr_32px_32px] text-[10px] font-semibold uppercase text-[#2e2200]">
               <span className="border-r border-b border-[#9d7b00] px-2 py-1">Sudah STF</span>
               <span className="border-r border-b border-[#9d7b00] px-1 py-1" />
-              <span className="border-b border-[#9d7b00] px-1 py-1 text-center">{data.sudah}</span>
+              <span className="border-b border-[#9d7b00] px-1 py-1 text-center">{workbookData.sudah}</span>
               <span className="border-r border-[#9d7b00] px-2 py-1">Belum STF</span>
               <span className="border-r border-[#9d7b00] px-1 py-1" />
-              <span className="px-1 py-1 text-center">{data.belum}</span>
+              <span className="px-1 py-1 text-center">{workbookData.belum}</span>
             </div>
           </div>
         </div>
@@ -527,31 +532,32 @@ function StfVirWorkbookPanel({ data }) {
   );
 }
 
-function QhseWorkbookSection({ securityData, stfVirData, periodLabel }) {
+function QhseWorkbookSection({ data }) {
+  const workbookData = data || {};
   return (
     <section className="space-y-3">
       <div>
         <h2 className="text-[17px] font-semibold text-[#1f2b38]">QHSE Workbook per Section</h2>
         <p className="mt-1 text-[12px] text-[#7c8793]">
-          Incident, Hazard, NCR, Security, dan STF &amp; VIR ditampilkan sampai periode {periodLabel}.
+          Incident, Hazard, NCR, Security, dan STF &amp; VIR ditampilkan dari data Supabase terbaru.
         </p>
       </div>
       <div className="grid gap-4 xl:grid-cols-3">
-        <NcrWorkbookPanel />
-        <IncidentWorkbookPanel />
-        <SecurityWorkbookPanel data={securityData} />
+        <NcrWorkbookPanel data={workbookData.ncr} />
+        <IncidentWorkbookPanel data={workbookData.incident} />
+        <SecurityWorkbookPanel data={workbookData.security} />
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.15fr_1fr]">
-        <HazardWorkbookPanel />
-        <StfVirWorkbookPanel data={stfVirData} />
+        <HazardWorkbookPanel data={workbookData.hazard} />
+        <StfVirWorkbookPanel data={workbookData.stfVir} />
       </div>
     </section>
   );
 }
 
-function ManhoursChart({ data, periodLabel }) {
-  const maxHours = Math.max(1, ...data.flatMap((item) => [item.target, item.actual]));
-  const hasData = data.length > 0;
+function ManhoursChart({ data }) {
+  const chartData = data?.length ? data : [];
+  const maxHours = Math.max(1, ...chartData.flatMap((item) => [item.target, item.actual]));
 
   return (
     <Card className="border-[#edf1f4]">
@@ -559,7 +565,7 @@ function ManhoursChart({ data, periodLabel }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[17px] font-semibold text-[#1f2b38]">Grafik Manhours</h2>
-            <p className="mt-1 text-[12px] text-[#7c8793]">Bar comparison target vs actual sampai {periodLabel}</p>
+            <p className="mt-1 text-[12px] text-[#7c8793]">Bar comparison target vs actual dari monthly report</p>
           </div>
           <div className="rounded-full bg-[#eef4ff] px-3 py-1 text-[11px] font-semibold text-[#376ad6]">
             AMC
@@ -584,17 +590,17 @@ function ManhoursChart({ data, periodLabel }) {
                 <line key={y} x1="8" x2="94" y1={y} y2={y} stroke="#edf1f4" strokeWidth="0.8" />
               ))}
 
-              {data.map((item, index) => {
-                const baseX = 14 + index * (76 / Math.max(1, data.length));
-                const targetHeight = (item.target / maxHours) * 42;
-                const actualHeight = (item.actual / maxHours) * 42;
-                return (
-                  <g key={item.month}>
-                    <rect x={baseX} y={72 - targetHeight} width="5" height={targetHeight} rx="1.5" fill="#cbd5e1" />
-                    <rect x={baseX + 7} y={72 - actualHeight} width="5" height={actualHeight} rx="1.5" fill="#376ad6" />
-                  </g>
-                );
-              })}
+            {chartData.map((item, index) => {
+              const baseX = 10 + index * (80 / Math.max(1, chartData.length));
+              const targetHeight = (item.target / maxHours) * 42;
+              const actualHeight = (item.actual / maxHours) * 42;
+              return (
+                <g key={item.month}>
+                  <rect x={baseX} y={72 - targetHeight} width="5" height={targetHeight} rx="1.5" fill="#cbd5e1" />
+                  <rect x={baseX + 7} y={72 - actualHeight} width="5" height={actualHeight} rx="1.5" fill="#376ad6" />
+                </g>
+              );
+            })}
             </svg>
           ) : (
             <div className="flex h-[240px] items-center justify-center text-[13px] font-medium text-[#8b96a1]">
@@ -602,14 +608,14 @@ function ManhoursChart({ data, periodLabel }) {
             </div>
           )}
 
-          <div className="grid px-2 text-center text-[11px] text-[#7a8591]" style={{ gridTemplateColumns: `repeat(${Math.max(1, data.length)}, minmax(0, 1fr))` }}>
-            {data.map((item) => (
+          <div className="grid grid-cols-4 px-2 text-center text-[11px] text-[#7a8591]">
+            {chartData.map((item) => (
               <span key={item.month}>{item.month}</span>
             ))}
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {data.map((item) => (
+          <div className="mt-4 grid grid-cols-4 gap-3">
+            {chartData.map((item) => (
               <div key={item.month} className="rounded-[14px] border border-[#edf1f4] bg-[#fafdfb] px-3 py-3 text-center">
                 <p className="text-[10px] uppercase tracking-[0.12em] text-[#8b96a1]">{item.month}</p>
                 <p className="mt-2 text-[11px] text-[#7c8793]">Target</p>
@@ -625,12 +631,12 @@ function ManhoursChart({ data, periodLabel }) {
   );
 }
 
-function ManpowerChart({ data, periodLabel }) {
-  const maxManpower = Math.max(1, ...data.map((item) => item.manpower));
-  const hasData = data.length > 0;
-  const points = data
+function ManpowerChart({ data }) {
+  const chartData = data?.length ? data : [];
+  const maxManpower = Math.max(1, ...chartData.map((item) => item.manpower));
+  const points = chartData
     .map((item, index) => {
-      const x = 12 + (index / (data.length - 1 || 1)) * 76;
+      const x = 12 + (index / (chartData.length - 1 || 1)) * 76;
       const y = 70 - (item.manpower / maxManpower) * 46;
       return `${x},${y}`;
     })
@@ -642,7 +648,7 @@ function ManpowerChart({ data, periodLabel }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[17px] font-semibold text-[#1f2b38]">Grafik Manpower</h2>
-            <p className="mt-1 text-[12px] text-[#7c8793]">Line chart manpower aktif sampai {periodLabel}</p>
+            <p className="mt-1 text-[12px] text-[#7c8793]">Line chart manpower aktif dari monthly report</p>
           </div>
           <div className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#1f9b58]">
             Crew Trend
@@ -655,38 +661,32 @@ function ManpowerChart({ data, periodLabel }) {
         </div>
 
         <div className="mt-5 rounded-[18px] border border-[#edf1f4] bg-white p-3">
-          {hasData ? (
-            <svg viewBox="0 0 100 82" className="h-[240px] w-full">
-              {[18, 31, 44, 57, 70].map((y) => (
-                <line key={y} x1="8" x2="94" y1={y} y2={y} stroke="#edf1f4" strokeWidth="0.8" />
-              ))}
-              <polyline
-                fill="none"
-                stroke="#1f9b58"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                points={points}
-              />
-              {points.split(" ").map((point) => {
-                const [cx, cy] = point.split(",");
-                return <circle key={`power-${point}`} cx={cx} cy={cy} r="1.6" fill="#1f9b58" />;
-              })}
-            </svg>
-          ) : (
-            <div className="flex h-[240px] items-center justify-center text-[13px] font-medium text-[#8b96a1]">
-              Belum ada data manpower untuk periode ini.
-            </div>
-          )}
-          <div className="grid px-2 text-center text-[11px] text-[#7a8591]" style={{ gridTemplateColumns: `repeat(${Math.max(1, data.length)}, minmax(0, 1fr))` }}>
-            {data.map((item) => (
+          <svg viewBox="0 0 100 82" className="h-[240px] w-full">
+            {[18, 31, 44, 57, 70].map((y) => (
+              <line key={y} x1="8" x2="94" y1={y} y2={y} stroke="#edf1f4" strokeWidth="0.8" />
+            ))}
+            <polyline
+              fill="none"
+              stroke="#1f9b58"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              points={points}
+            />
+            {points.split(" ").map((point) => {
+              const [cx, cy] = point.split(",");
+              return <circle key={`power-${point}`} cx={cx} cy={cy} r="1.6" fill="#1f9b58" />;
+            })}
+          </svg>
+          <div className="grid grid-cols-4 px-2 text-center text-[11px] text-[#7a8591]">
+            {chartData.map((item) => (
               <span key={item.month}>{item.month}</span>
             ))}
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {data.map((item) => (
+        <div className="mt-4 grid grid-cols-4 gap-3">
+          {chartData.map((item) => (
             <div key={item.month} className="rounded-[14px] border border-[#edf1f4] bg-[#fafdfb] px-3 py-3 text-center">
               <p className="text-[10px] uppercase tracking-[0.12em] text-[#8b96a1]">{item.month}</p>
               <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#edf9f1] px-2.5 py-1 text-[10px] font-semibold text-[#1f9b58]">
@@ -826,14 +826,15 @@ function LsaEquipmentWorkbookPanel({ item }) {
   );
 }
 
-function LsaWorkbookSection({ data, periodLabel }) {
+function LsaWorkbookSection({ data }) {
+  const equipmentData = data || [];
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[17px] font-semibold text-[#1f2b38]">LSA &amp; FFA per Equipment</h2>
           <p className="mt-1 text-[12px] text-[#7c8793]">
-            Grafik workbook LSA &amp; FFA mengikuti filter sampai periode {periodLabel}.
+            Grafik workbook LSA &amp; FFA mengikuti data equipment terbaru dari Supabase.
           </p>
         </div>
         <div className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#1f9b58]">
@@ -842,7 +843,7 @@ function LsaWorkbookSection({ data, periodLabel }) {
       </div>
 
       <div className="space-y-4">
-        {data.map((item) => (
+        {equipmentData.map((item) => (
           <LsaEquipmentWorkbookPanel key={item.equipment} item={item} />
         ))}
       </div>
@@ -850,7 +851,8 @@ function LsaWorkbookSection({ data, periodLabel }) {
   );
 }
 
-function ModuleSummaryTable() {
+function ModuleSummaryTable({ rows }) {
+  const tableRows = rows || [];
   return (
     <Card className="overflow-hidden border-[#edf1f4]">
       <CardContent className="p-0">
@@ -874,9 +876,9 @@ function ModuleSummaryTable() {
               </tr>
             </thead>
             <tbody>
-              {moduleRows.map((item) => {
+              {tableRows.map((item) => {
                 const Icon = item.icon;
-                const progress = item.isManhours ? 98 : Math.round((item.closed / item.total) * 100);
+                const progress = item.total > 0 ? Math.round((item.closed / item.total) * 100) : 0;
 
                 return (
                   <tr key={item.title} className="border-b border-[#f0f3f5] align-top hover:bg-[#fcfcfd]">
@@ -916,7 +918,8 @@ function ModuleSummaryTable() {
   );
 }
 
-function VesselTable() {
+function VesselTable({ rows }) {
+  const tableRows = rows || [];
   return (
     <Card className="overflow-hidden border-[#edf1f4]">
       <CardContent className="p-0">
@@ -940,7 +943,7 @@ function VesselTable() {
               </tr>
             </thead>
             <tbody>
-              {vesselSummary.map((item) => (
+              {tableRows.map((item) => (
                 <tr key={item.vessel} className="border-b border-[#f0f3f5] hover:bg-[#fcfcfd]">
                   <td className="px-4 py-3 font-semibold text-[#243041]">{item.vessel}</td>
                   <td className="px-4 py-3 text-[#52606d]">{item.incident}</td>
@@ -962,85 +965,158 @@ function VesselTable() {
   );
 }
 
-function applyMonthFilter(monthlyCounts, selectedMonth) {
-  return monthlyCounts.map((value, index) => (index < selectedMonth ? value : 0));
-}
-
 export default function DashboardPage() {
-  const searchParams = useSearchParams();
-  const currentDate = new Date();
-  const selectedMonth = Number(searchParams.get("month") || currentDate.getMonth() + 1);
-  const selectedYear = Number(searchParams.get("year") || currentDate.getFullYear());
-  const periodLabel = `${MONTH_LABELS[selectedMonth - 1] || MONTH_LABELS[currentDate.getMonth()]} ${selectedYear}`;
+  const [dashboardData, setDashboardData] = useState({
+    monthlyReports: [],
+    incidents: [],
+    hazards: [],
+    ncrs: [],
+    lsaFfa: [],
+    securityRecords: [],
+    stfVirRecords: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const filteredManhoursTrend = useMemo(() => {
-    return manhoursTrend.filter((item) => item.year === selectedYear && item.monthIndex <= selectedMonth);
-  }, [selectedMonth, selectedYear]);
+  useEffect(() => {
+    let isMounted = true;
 
-  const filteredSecurityWorkbookData = useMemo(
-    () => ({
-      ...securityWorkbookData,
-      monthly: applyMonthFilter(securityWorkbookData.monthly, selectedMonth),
-    }),
-    [selectedMonth],
+    Promise.all([
+      getMonthlyReportView(),
+      getIncidentList(),
+      getHazardReports(),
+      getNcrList(),
+      getLsaFfaList(),
+      getSecurityRecords(),
+      getStfVirList(),
+    ])
+      .then(([monthlyReports, incidents, hazards, ncrs, lsaFfa, securityRecords, stfVirRecords]) => {
+        if (!isMounted) return;
+        setDashboardData({ monthlyReports, incidents, hazards, ncrs, lsaFfa, securityRecords, stfVirRecords });
+        setErrorMessage("");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil data dashboard.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const currentYear = dashboardData.monthlyReports[0]?.tahun || new Date().getFullYear();
+  const currentYearMonthly = useMemo(
+    () => dashboardData.monthlyReports.filter((item) => Number(item.tahun) === Number(currentYear)),
+    [dashboardData.monthlyReports, currentYear]
+  );
+  const manhoursChartData = useMemo(() => buildMonthlyTrend(currentYearMonthly), [currentYearMonthly]);
+  const lsaData = useMemo(() => buildLsaEquipmentData(dashboardData.lsaFfa), [dashboardData.lsaFfa]);
+  const workbookData = useMemo(
+    () => buildWorkbookData(dashboardData),
+    [dashboardData]
   );
 
-  const filteredStfVirWorkbookData = useMemo(
-    () => ({
-      ...stfVirWorkbookData,
-      target: selectedYear,
-      monthly: applyMonthFilter(stfVirWorkbookData.monthly, selectedMonth),
-    }),
-    [selectedMonth, selectedYear],
-  );
+  const moduleTableRows = useMemo(() => {
+    const incidentClosed = dashboardData.incidents.filter((item) => isClosedStatus(item.status)).length;
+    const ncrClosed = dashboardData.ncrs.filter((item) => isClosedStatus(item.status)).length;
+    const securityClosed = dashboardData.securityRecords.filter((item) => isClosedStatus(item.status)).length;
+    const lsaSafe = dashboardData.lsaFfa.filter((item) => String(item.status || "").toLowerCase() === "sudah").length;
+    const totalManhours = currentYearMonthly.reduce((sum, item) => sum + Number(item.totalManhours || 0), 0);
+    const totalHazard = dashboardData.hazards.reduce((sum, item) => sum + Number(item.totalReport || 0), 0);
+    const totalStf = dashboardData.stfVirRecords.reduce((sum, item) => sum + Number(item.total || 0), 0);
 
-  const filteredLsaEquipmentData = useMemo(
-    () =>
-      lsaEquipmentData.map((item) => ({
-        ...item,
-        monthlyCounts: applyMonthFilter(item.monthlyCounts, selectedMonth),
-      })),
-    [selectedMonth],
-  );
+    return [
+      { title: "Incident Report", icon: AlertTriangle, total: dashboardData.incidents.length, open: dashboardData.incidents.length - incidentClosed, closed: incidentClosed, trend: `${dashboardData.incidents.length}`, color: "#c84f58", note: "Near miss dan insiden operasional" },
+      { title: "Hazard Report", icon: BadgeAlert, total: totalHazard, open: 0, closed: totalHazard, trend: `${totalHazard}`, color: "#cf7b2e", note: "Unsafe action & unsafe condition" },
+      { title: "Manhours", icon: Timer, total: totalManhours, open: 0, closed: totalManhours, trend: `${totalManhours}`, color: "#376ad6", note: "Akumulasi jam kerja bulanan", isManhours: true },
+      { title: "NCR", icon: ClipboardList, total: dashboardData.ncrs.length, open: dashboardData.ncrs.length - ncrClosed, closed: ncrClosed, trend: `${dashboardData.ncrs.length}`, color: "#b8434d", note: "Temuan audit dan corrective action" },
+      { title: "LSA & FFA", icon: LifeBuoy, total: dashboardData.lsaFfa.length, open: dashboardData.lsaFfa.length - lsaSafe, closed: lsaSafe, trend: `${dashboardData.lsaFfa.length}`, color: "#1f9b58", note: "Expiry control dan replacement plan" },
+      { title: "STF & VIR", icon: ScanSearch, total: totalStf, open: 0, closed: totalStf, trend: `${totalStf}`, color: "#6b7280", note: "Checklist dan vessel inspection report" },
+      { title: "Security Record", icon: ShieldCheck, total: dashboardData.securityRecords.length, open: dashboardData.securityRecords.length - securityClosed, closed: securityClosed, trend: `${dashboardData.securityRecords.length}`, color: "#2f63ce", note: "Monitoring security event" },
+    ];
+  }, [currentYearMonthly, dashboardData]);
+
+  const vesselRows = useMemo(() => {
+    const map = new Map();
+    const ensure = (name) => {
+      const key = name || "-";
+      if (!map.has(key)) map.set(key, { vessel: key, incident: 0, hazard: 0, ncr: 0, security: 0, open: 0 });
+      return map.get(key);
+    };
+
+    dashboardData.incidents.forEach((item) => {
+      const row = ensure(item.tugboat || item.barge);
+      row.incident += 1;
+      if (!isClosedStatus(item.status)) row.open += 1;
+    });
+    dashboardData.hazards.forEach((item) => {
+      ensure(item.kapal).hazard += Number(item.totalReport || 0);
+    });
+    dashboardData.ncrs.forEach((item) => {
+      const row = ensure(item.kapal);
+      row.ncr += 1;
+      if (!isClosedStatus(item.status)) row.open += 1;
+    });
+    dashboardData.securityRecords.forEach((item) => {
+      const row = ensure(item.kapal);
+      row.security += 1;
+      if (!isClosedStatus(item.status)) row.open += 1;
+    });
+
+    return Array.from(map.values()).slice(0, 12);
+  }, [dashboardData]);
+
+  const totalRecords = moduleTableRows.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const totalOpen = moduleTableRows.reduce((sum, item) => sum + (item.isManhours ? 0 : Number(item.open || 0)), 0);
+  const totalClosed = moduleTableRows.reduce((sum, item) => sum + (item.isManhours ? 0 : Number(item.closed || 0)), 0);
+  const dueThisWeek = dashboardData.lsaFfa.filter((item) => {
+    const days = dateDiffInDays(item.nextInspectionDate);
+    return days !== null && days >= 0 && days <= 7;
+  }).length;
+  const dynamicSummaryStats = [
+    { title: "Total Record QHSE", value: totalRecords.toLocaleString("id-ID"), note: "Akumulasi seluruh modul dari Supabase", icon: FileSpreadsheet, tone: "bg-[#edf9f1] text-[#1f9b58]" },
+    { title: "Open Follow Up", value: totalOpen.toLocaleString("id-ID"), note: "Perlu review dan tindak lanjut", icon: AlertTriangle, tone: "bg-[#fff7e8] text-[#c98431]" },
+    { title: "Close Rate", value: `${totalOpen + totalClosed > 0 ? Math.round((totalClosed / (totalOpen + totalClosed)) * 100) : 0}%`, note: "Rasio close lintas modul", icon: CheckCircle2, tone: "bg-[#eef4ff] text-[#376ad6]" },
+    { title: "Due This Week", value: dueThisWeek.toLocaleString("id-ID"), note: "Equipment jatuh tempo 7 hari", icon: BellRing, tone: "bg-[#fff0f0] text-[#c53030]" },
+  ];
 
   return (
     <div className="space-y-5">
-      <section className="rounded-[18px] border border-[#edf1f4] bg-white px-5 py-4 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#6b7682]">
-              Periode Aktif
-            </p>
-            <h1 className="mt-1 text-[22px] font-bold text-[#1f2b38]">{periodLabel}</h1>
-          </div>
-          <p className="max-w-xl text-[13px] leading-6 text-[#667481]">
-            Grafik Manhours, Manpower, Security, STF &amp; VIR, dan LSA &amp; FFA mengikuti filter bulan/tahun di header.
-          </p>
+      {errorMessage ? (
+        <div className="rounded-[14px] border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          {errorMessage}
         </div>
-      </section>
+      ) : null}
+
+      {loading ? (
+        <div className="rounded-[14px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-700">
+          Mengambil data dashboard dari Supabase...
+        </div>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {summaryStats.map((item) => (
+        {dynamicSummaryStats.map((item) => (
           <StatCard key={item.title} item={item} />
         ))}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <ManhoursChart data={filteredManhoursTrend} periodLabel={periodLabel} />
-        <ManpowerChart data={filteredManhoursTrend} periodLabel={periodLabel} />
+        <ManhoursChart data={manhoursChartData} />
+        <ManpowerChart data={manhoursChartData} />
       </section>
 
-      <QhseWorkbookSection
-        securityData={filteredSecurityWorkbookData}
-        stfVirData={filteredStfVirWorkbookData}
-        periodLabel={periodLabel}
-      />
+      <QhseWorkbookSection data={workbookData} />
 
-      <LsaWorkbookSection data={filteredLsaEquipmentData} periodLabel={periodLabel} />
+      <LsaWorkbookSection data={lsaData} />
 
-      <ModuleSummaryTable />
+      <ModuleSummaryTable rows={moduleTableRows} />
 
-      <VesselTable />
+      <VesselTable rows={vesselRows} />
     </div>
   );
 }

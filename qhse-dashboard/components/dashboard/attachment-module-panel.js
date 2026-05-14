@@ -34,6 +34,10 @@ function getContextRecordIds(context) {
   return ids.filter(Boolean).map(String);
 }
 
+function getContextLabel(context) {
+  return context?.label || context?.recordLabel || context?.recordId || "-";
+}
+
 function formatDateTime(value) {
   if (!value) return "-";
   return new Date(value).toLocaleString("id-ID", {
@@ -145,7 +149,7 @@ export default function AttachmentModulePanel({
             {contexts.length ? (
               contexts.map((context) => (
                 <option key={context.recordId} value={context.recordId}>
-                  {context.recordId} - {context.uploadedBy}
+                  {getContextLabel(context)} - {context.uploadedBy || "-"}
                 </option>
               ))
             ) : (
@@ -218,7 +222,9 @@ export default function AttachmentModulePanel({
                   <Link2 size={13} />
                   Record ID
                 </div>
-                <p className="mt-2 text-[13px] font-medium text-[#243041]">{resolvedRecordId || "-"}</p>
+                <p className="mt-2 text-[13px] font-medium text-[#243041]">
+                  {getContextLabel(contexts.find((item) => item.recordId === resolvedRecordId) || contexts[0])}
+                </p>
               </div>
               <div className="rounded-[16px] border border-[#edf1f4] bg-[#fafdfb] px-4 py-3">
                 <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b96a1]">
