@@ -10,10 +10,11 @@ import {
   LifeBuoy,
   Search,
   Ship,
+  Trash,
   X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { getLsaFfaList } from "@/lib/services/lsaFfaService";
+import { deleteLsaFfa, getLsaFfaList } from "@/lib/services/lsaFfaService";
 
 function dateDiffInDays(date) {
   if (!date) return null;
@@ -191,31 +192,95 @@ function DetailModal({ data, onClose }) {
   );
 }
 
+function DeleteModal({ data, isDeleting, onCancel, onConfirm }) {
+  if (!data) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-3 py-6"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <div className="w-full max-w-[420px] rounded-[18px] border border-[#e5eaee] bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+        <h3 className="text-[20px] font-bold text-[#1f2b38]">Hapus Equipment</h3>
+        <p className="mt-2 text-[13px] leading-6 text-[#667581]">
+          Data <span className="font-semibold text-[#243041]">{data.jenisEquipment || data.id}</span> dari kapal{" "}
+          <span className="font-semibold text-[#243041]">{data.kapal || "-"}</span> akan dihapus dari Supabase.
+        </p>
+
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isDeleting}
+            className="rounded-[10px] border border-[#d9e2e7] px-4 py-2.5 text-[13px] font-semibold text-[#566472] hover:bg-[#f8fafb] disabled:opacity-60"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="rounded-[10px] bg-red-600 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-red-700 disabled:opacity-70"
+          >
+            {isDeleting ? "Menghapus..." : "Hapus"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EquipmentExpiryAlertPage() {
   const [equipment, setEquipment] = useState([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [detailData, setDetailData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function loadEquipment() {
-    setLoading(true);
-    setErrorMessage("");
+  useEffect(() => {
+    let isMounted = true;
+
+    getLsaFfaList()
+      .then((data) => {
+        if (!isMounted) return;
+        setEquipment(data);
+        setErrorMessage("");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setErrorMessage(error.message || "Gagal mengambil data equipment.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  async function handleDeleteEquipment() {
+    if (!deleteTarget) return;
 
     try {
-      const data = await getLsaFfaList();
-      setEquipment(data);
+      setIsDeleting(true);
+      setErrorMessage("");
+      await deleteLsaFfa(deleteTarget.id);
+      setEquipment((current) => current.filter((item) => item.id !== deleteTarget.id));
+      setDetailData((current) => (current?.id === deleteTarget.id ? null : current));
+      setDeleteTarget(null);
     } catch (error) {
-      setErrorMessage(error.message || "Gagal mengambil data equipment.");
+      setErrorMessage(error.message || "Gagal menghapus data equipment.");
     } finally {
-      setLoading(false);
+      setIsDeleting(false);
     }
   }
-
-  useEffect(() => {
-    loadEquipment();
-  }, []);
 
   const computedEquipment = useMemo(() => {
     return equipment.map((item) => {
@@ -519,13 +584,22 @@ export default function EquipmentExpiryAlertPage() {
                           </p>
                         </td>
                         <td className="whitespace-nowrap px-3 py-3">
-                          <button
-                            onClick={() => setDetailData(item)}
-                            className="inline-flex items-center gap-1 rounded-[6px] bg-[#f3f4f6] px-2 py-1 text-[10px] font-medium text-[#374151] hover:bg-[#e5e7eb]"
-                          >
-                            <Eye size={11} />
-                            Detail
-                          </button>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              onClick={() => setDetailData(item)}
+                              className="inline-flex items-center gap-1 rounded-[6px] bg-[#f3f4f6] px-2 py-1 text-[10px] font-medium text-[#374151] hover:bg-[#e5e7eb]"
+                            >
+                              <Eye size={11} />
+                              Detail
+                            </button>
+                            <button
+                              onClick={() => setDeleteTarget(item)}
+                              className="inline-flex items-center gap-1 rounded-[6px] bg-[#fee2e2] px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-[#fecaca]"
+                            >
+                              <Trash size={11} />
+                              Hapus
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -538,6 +612,12 @@ export default function EquipmentExpiryAlertPage() {
       </Card>
 
       <DetailModal data={detailData} onClose={() => setDetailData(null)} />
+      <DeleteModal
+        data={deleteTarget}
+        isDeleting={isDeleting}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteEquipment}
+      />
     </div>
   );
 }

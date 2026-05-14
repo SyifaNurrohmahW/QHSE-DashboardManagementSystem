@@ -2,46 +2,45 @@
 
 import { startTransition, useEffect, useState } from "react";
 import { BellRing } from "lucide-react";
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  readNotificationPrefs,
+  writeNotificationPrefs,
+} from "@/lib/notificationPreferences";
 
-const STORAGE_KEY = "qhse_notif_prefs";
 const NOTIFICATION_ITEMS = [
+  {
+    key: "equipmentExpiry",
+    title: "Equipment Expiry Alert",
+    desc: "Tampilkan notifikasi equipment LSA & FFA yang expired atau mendekati jatuh tempo.",
+  },
   {
     key: "approvalNcr",
     title: "Approval NCR",
-    desc: "Notifikasi saat ada temuan baru yang butuh review atau approval.",
-  },
-  {
-    key: "targetClose",
-    title: "Reminder Target Close",
-    desc: "Ingatkan saat target close date sudah dekat atau melewati batas.",
+    desc: "Siapkan kanal untuk notifikasi temuan NCR yang butuh review atau approval.",
   },
   {
     key: "securityUpdate",
     title: "Pembaruan Keamanan",
-    desc: "Notifikasi perubahan password, login baru, atau update akses akun.",
+    desc: "Siapkan kanal untuk notifikasi perubahan password, login baru, atau update akses akun.",
   },
 ];
 
 function PreferensiNotif() {
-  const [toggles, setToggles] = useState({
-    approvalNcr: true,
-    targetClose: true,
-    securityUpdate: false,
-  });
+  const [toggles, setToggles] = useState(DEFAULT_NOTIFICATION_PREFS);
+  const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
-    const savedPrefs = localStorage.getItem(STORAGE_KEY);
-    if (savedPrefs) {
-      startTransition(() => {
-        setToggles(JSON.parse(savedPrefs));
-      });
-    }
+    startTransition(() => {
+      setToggles(readNotificationPrefs());
+    });
   }, []);
 
   const handleToggle = (key) => {
     setToggles((prev) => {
       const nextState = { ...prev, [key]: !prev[key] };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+      writeNotificationPrefs(nextState);
+      setSavedMessage("Preferensi notifikasi tersimpan.");
       return nextState;
     });
   };
@@ -76,7 +75,7 @@ function PreferensiNotif() {
               <input
                 type="checkbox"
                 className="peer sr-only"
-                checked={toggles[item.key]}
+                checked={Boolean(toggles[item.key])}
                 onChange={() => handleToggle(item.key)}
               />
               <div className="h-6 w-11 rounded-full bg-slate-200 transition peer-checked:bg-emerald-600 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-5" />
@@ -84,6 +83,12 @@ function PreferensiNotif() {
           </div>
         ))}
       </div>
+
+      {savedMessage ? (
+        <p className="mt-4 rounded-[12px] bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-700">
+          {savedMessage}
+        </p>
+      ) : null}
     </div>
   );
 }

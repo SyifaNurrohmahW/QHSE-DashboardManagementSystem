@@ -22,6 +22,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import AttachmentModulePanel from "@/components/dashboard/attachment-module-panel";
 import { Card, CardContent } from "@/components/ui/card";
 import { getKapalOptions } from "@/lib/services/kapalService";
 import {
@@ -527,6 +528,15 @@ export default function LsaFfaPage() {
     return [...summary.values()];
   }, [data]);
 
+  const attachmentContexts = useMemo(() => {
+    return data.map((item) => ({
+      moduleName: "lsa_ffa",
+      recordId: item.id,
+      label: `${item.jenisEquipment || "Equipment"} - ${item.kapal || "-"}`,
+      uploadedBy: item.kapal || item.jenisEquipment || "-",
+    }));
+  }, [data]);
+
   function openCreate() {
     setEditItem(null);
     setModalOpen(true);
@@ -884,6 +894,12 @@ export default function LsaFfaPage() {
           </Card>
         </div>
       </section>
+
+      <AttachmentModulePanel
+        title="Attachment LSA & FFA"
+        description="Section ini hanya menampilkan file evidence yang di-upload dari halaman Attachment untuk record equipment LSA & FFA terkait."
+        contexts={attachmentContexts}
+      />
 
       <FormModal
         key={editItem?.id || modalOpen}

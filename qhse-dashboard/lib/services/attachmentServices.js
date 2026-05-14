@@ -49,19 +49,92 @@ function getFilePath({ moduleName, recordId, file }) {
   return `${cleanModuleName}/${recordId}/${timestamp}-${cleanFileName}`;
 }
 
-function fromDatabaseRow(row) {
+function formatRoleName(role) {
+  const labels = {
+    superadmin: "Super Admin",
+    admin: "Admin",
+    viewer: "Viewer",
+  };
+
+  return labels[role] || role || "";
+}
+
+function getDisplayNameFromUser(user, role = "") {
+  const metadata = user?.user_metadata || {};
+
+  return (
+    metadata.full_name ||
+    metadata.name ||
+    metadata.display_name ||
+    formatRoleName(role) ||
+    user?.email?.split("@")[0] ||
+    "User"
+  );
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || ""),
+  );
+}
+
+async function getCurrentUploaderName() {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) throw new Error(userError.message);
+  if (!user) throw new Error("User belum login.");
+
+  const { data: role } = await supabase.rpc("get_current_user_role");
+
+  return {
+    user,
+    displayName: getDisplayNameFromUser(user, role),
+  };
+}
+
+export async function getCurrentAttachmentUploaderName() {
+  const currentUploader = await getCurrentUploaderName();
+  return currentUploader.displayName;
+}
+
+function resolveUploadedBy(value, currentUploader = null) {
+  if (!value) return "-";
+
+  if (currentUploader?.user?.id === value) {
+    return currentUploader.displayName;
+  }
+
+  if (isUuid(value)) {
+    return currentUploader?.displayName || "Super Admin";
+  }
+
+  return value;
+}
+
+function fromDatabaseRow(row, currentUploader = null) {
   return {
     id: row.id,
     moduleName: row.module_name,
     recordId: row.record_id,
     fileName: row.file_name,
     fileUrl: row.file_url,
-    uploadedBy: row.uploaded_by,
+    uploadedBy: resolveUploadedBy(row.uploaded_by, currentUploader),
     uploadedAt: row.uploaded_at,
   };
 }
 
 export async function getAttachments() {
+  let currentUploader = null;
+
+  try {
+    currentUploader = await getCurrentUploaderName();
+  } catch {
+    currentUploader = null;
+  }
+
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .select("*")
@@ -69,10 +142,18 @@ export async function getAttachments() {
 
   if (error) throw new Error(error.message);
 
-  return data.map(fromDatabaseRow);
+  return data.map((row) => fromDatabaseRow(row, currentUploader));
 }
 
 export async function getAttachmentsByRecord(moduleName, recordId) {
+  let currentUploader = null;
+
+  try {
+    currentUploader = await getCurrentUploaderName();
+  } catch {
+    currentUploader = null;
+  }
+
   const { data, error } = await supabase
     .from(TABLE_NAME)
     .select("*")
@@ -82,7 +163,7 @@ export async function getAttachmentsByRecord(moduleName, recordId) {
 
   if (error) throw new Error(error.message);
 
-  return data.map(fromDatabaseRow);
+  return data.map((row) => fromDatabaseRow(row, currentUploader));
 }
 
 export async function uploadAttachment({ moduleName, recordId, file }) {
@@ -90,13 +171,7 @@ export async function uploadAttachment({ moduleName, recordId, file }) {
   if (!recordId) throw new Error("Record wajib dipilih.");
   if (!file) throw new Error("File wajib dipilih.");
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) throw new Error(userError.message);
-  if (!user) throw new Error("User belum login.");
+  const currentUploader = await getCurrentUploaderName();
 
   const filePath = getFilePath({
     moduleName,
@@ -127,7 +202,7 @@ export async function uploadAttachment({ moduleName, recordId, file }) {
         record_id: recordId,
         file_name: file.name,
         file_url: publicUrl,
-        uploaded_by: user.id,
+        uploaded_by: currentUploader.user.id,
       },
     ])
     .select("*")
@@ -138,7 +213,7 @@ export async function uploadAttachment({ moduleName, recordId, file }) {
     throw new Error(error.message);
   }
 
-  return fromDatabaseRow(data);
+  return fromDatabaseRow(data, currentUploader);
 }
 
 export async function deleteAttachment(id) {
@@ -216,7 +291,7 @@ async function getIncidentRecordOptions() {
   if (error) throw new Error(error.message);
 
   return data.map((item) => ({
-    value: item.no_insiden || item.id,
+    value: item.id,
     label: item.no_insiden || item.id,
     description: item.deskripsi || "",
   }));
