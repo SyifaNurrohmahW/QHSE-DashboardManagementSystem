@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ShipWheel,
   Target,
+  Trash2,
   X,
 } from "lucide-react";
 import AttachmentModulePanel from "@/components/dashboard/attachment-module-panel";
@@ -268,15 +269,89 @@ function HazardDetailModal({ report, onClose }) {
   );
 }
 
+function DeleteHazardModal({ report, onClose, onConfirm, isDeleting, errorMessage }) {
+  if (!report) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f1720]/55 px-4 py-6">
+      <div className="w-full max-w-md overflow-hidden rounded-[22px] bg-white shadow-[0_24px_60px_rgba(15,23,32,0.25)]">
+        <div className="flex items-start gap-4 border-b border-[#edf1f4] px-6 py-5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#fff0f0] text-[#d92d20]">
+            <AlertTriangle size={22} strokeWidth={2.2} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#d92d20]">
+              Konfirmasi Hapus
+            </p>
+            <h2 className="mt-2 text-[22px] font-bold leading-tight text-[#243041]">
+              Hapus hazard report?
+            </h2>
+            <p className="mt-2 text-[13px] leading-6 text-[#657482]">
+              Data <span className="font-semibold text-[#243041]">{report.kapal}</span> periode{" "}
+              <span className="font-semibold text-[#243041]">{formatMonthYear(report.tanggal)}</span> akan dihapus.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isDeleting}
+            className="ml-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f4f7f9] text-[#5e6a76] transition hover:bg-[#e9eff3] disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Tutup modal hapus"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5">
+          <div className="rounded-[16px] border border-[#ffe1e1] bg-[#fff8f8] px-4 py-3">
+            <p className="text-[13px] leading-6 text-[#7a3440]">
+              Aksi ini akan menghapus data hazard report dari Supabase dan tidak bisa dibatalkan dari halaman ini.
+            </p>
+          </div>
+
+          {errorMessage ? (
+            <div className="mt-3 rounded-[14px] border border-[#ffd7d7] bg-[#fff7f7] px-4 py-3 text-[13px] font-medium leading-6 text-[#b42318]">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isDeleting}
+              className="inline-flex items-center justify-center rounded-[12px] border border-[#d7e0e6] px-4 py-3 text-[13px] font-semibold text-[#51606d] transition hover:bg-[#f6f8fa] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isDeleting}
+              className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#d92d20] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#b42318] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <Trash2 size={16} />
+              {isDeleting ? "Menghapus..." : "Ya, hapus"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HazardPage() {
   const [reports, setReports] = useState([]);
   const [kapalOptions, setKapalOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [detailReport, setDetailReport] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -384,16 +459,32 @@ export default function HazardPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (reportId) => {
-    const confirmed = window.confirm("Yakin ingin menghapus hazard report ini?");
-    if (!confirmed) return;
+  const handleOpenDelete = (report) => {
+    setDeleteError("");
+    setDeleteTarget(report);
+  };
+
+  const handleCloseDelete = () => {
+    if (isDeleting) return;
+
+    setDeleteTarget(null);
+    setDeleteError("");
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
 
     try {
+      setIsDeleting(true);
       setErrorMessage("");
-      await deleteHazardReport(reportId);
-      setReports((current) => current.filter((item) => item.id !== reportId));
+      setDeleteError("");
+      await deleteHazardReport(deleteTarget.id);
+      setReports((current) => current.filter((item) => item.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (error) {
-      setErrorMessage(error.message || "Gagal menghapus hazard report.");
+      setDeleteError(error.message || "Gagal menghapus hazard report.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -616,7 +707,7 @@ export default function HazardPage() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleDelete(item.id)}
+                                  onClick={() => handleOpenDelete(item)}
                                   className="inline-flex items-center justify-center rounded-[6px] bg-[#fff0f0] px-2.5 py-1 text-[10px] font-medium text-[#c53030] transition hover:bg-[#fecaca]"
                                 >
                                   Hapus
@@ -651,6 +742,13 @@ export default function HazardPage() {
         isSaving={isSaving}
       />
       <HazardDetailModal report={detailReport} onClose={() => setDetailReport(null)} />
+      <DeleteHazardModal
+        report={deleteTarget}
+        onClose={handleCloseDelete}
+        onConfirm={handleDelete}
+        isDeleting={isDeleting}
+        errorMessage={deleteError}
+      />
     </>
   );
 }

@@ -37,7 +37,7 @@ import {
 const BULAN_OPTIONS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 const EQUIPMENT_DESCRIPTIONS = {
-  "PMK II": "Pemadam Kebakaran",
+  "PMK": "Pemadam Kebakaran",
   "EPIRB REG TEST BASARNAS": "Emergency Position Indicating Radio Beacon",
   "SERT HRU LIFERAFT": "Hydrostatic Release Unit Liferaft",
   "Co2 System": "Fixed CO2 Fire Suppression System",
@@ -45,6 +45,7 @@ const EQUIPMENT_DESCRIPTIONS = {
   EEBD: "Emergency Escape Breathing Device",
   "Gas Detector": "Gas Detection System",
   "HRU EPIRB": "Hydrostatic Release Unit EPIRB",
+  "LIFERAFT": "Liferaft"
 };
 
 const STATUS_STYLE = {
@@ -57,7 +58,7 @@ const STATUS_STYLE = {
 };
 
 const EQUIP_ICON = {
-  "PMK II": Flame,
+  "PMK": Flame,
   "EPIRB REG TEST BASARNAS": Zap,
   "SERT HRU LIFERAFT": Activity,
   "Co2 System": ClipboardCheck,
@@ -65,6 +66,7 @@ const EQUIP_ICON = {
   EEBD: ShieldOff,
   "Gas Detector": AlertTriangle,
   "HRU EPIRB": Shield,
+  "LIFERAFT": CheckCircle2,
 };
 
 const EMPTY_FORM = {
@@ -93,22 +95,54 @@ function toDateInput(value) {
   return String(value).slice(0, 10);
 }
 
-function alertLabel(days) {
-  if (days === null || days === undefined || days === "") return null;
-  const numericDays = Number(days);
-  if (Number.isNaN(numericDays)) return null;
-  if (numericDays < 0) return { text: `${Math.abs(numericDays)}h lewat`, cls: "bg-[#fff0f0] text-[#c53030]" };
-  if (numericDays <= 30) return { text: `${numericDays}h lagi`, cls: "bg-[#fff7e8] text-[#b26a00]" };
-  if (numericDays <= 90) return { text: `${numericDays}h lagi`, cls: "bg-[#fffbeb] text-[#92740a]" };
-  return { text: `${numericDays}h lagi`, cls: "bg-[#f0fdf4] text-[#166534]" };
+function parseDateOnly(value) {
+  if (!value) return null;
+  const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function calculateInspectionMonths(start, next) {
+  const startDate = parseDateOnly(start);
+  const nextDate = parseDateOnly(next);
+  if (!startDate || !nextDate || nextDate < startDate) return "";
+
+  const months =
+    (nextDate.getFullYear() - startDate.getFullYear()) * 12 +
+    (nextDate.getMonth() - startDate.getMonth()) -
+    (nextDate.getDate() < startDate.getDate() ? 1 : 0);
+
+  return Math.max(0, months);
+}
+
+function daysUntilNextInspection(item) {
+  const nextDate = parseDateOnly(item?.nextInspectionDate);
+  if (!nextDate) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function alertLabel(months) {
+  if (months === null || months === undefined || months === "") return null;
+  const numericMonths = Number(months);
+  if (Number.isNaN(numericMonths)) return null;
+  if (numericMonths <= 1) return { text: `${numericMonths} bulan`, cls: "bg-[#fff7e8] text-[#b26a00]" };
+  if (numericMonths <= 6) return { text: `${numericMonths} bulan`, cls: "bg-[#fffbeb] text-[#92740a]" };
+  return { text: `${numericMonths} bulan`, cls: "bg-[#f0fdf4] text-[#166534]" };
 }
 
 function isOverdue(item) {
-  return item.alertDays !== "" && item.alertDays !== null && Number(item.alertDays) < 0;
+  const days = daysUntilNextInspection(item);
+  return days !== null && days < 0;
 }
 
 function needsAlert(item) {
-  return item.alertDays !== "" && item.alertDays !== null && Number(item.alertDays) <= 30;
+  const days = daysUntilNextInspection(item);
+  return days !== null && days >= 0 && days <= 1;
 }
 
 function Pill({ item }) {
@@ -120,10 +154,41 @@ function Pill({ item }) {
   );
 }
 
-function AlertBadge({ days }) {
-  const info = alertLabel(days);
+function AlertBadge({ months }) {
+  const info = alertLabel(months);
   if (!info) return <span className="text-[11px] text-[#9aa4ae]">-</span>;
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${info.cls}`}>{info.text}</span>;
+}
+
+function DueBadge({ item }) {
+  const days = daysUntilNextInspection(item);
+  if (days === null) return <span className="text-[11px] text-[#9aa4ae]">-</span>;
+  if (days < 0) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fff0f0] px-2 py-0.5 text-[10px] font-semibold text-[#c53030]">
+        H+{Math.abs(days)}
+      </span>
+    );
+  }
+  if (days === 0) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fff0f0] px-2 py-0.5 text-[10px] font-semibold text-[#c53030]">
+        Hari H
+      </span>
+    );
+  }
+  if (days === 1) {
+    return (
+      <span className="inline-flex rounded-full bg-[#fff7e8] px-2 py-0.5 text-[10px] font-semibold text-[#b26a00]">
+        H-1
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex rounded-full bg-[#f0fdf4] px-2 py-0.5 text-[10px] font-medium text-[#166534]">
+      H-{days}
+    </span>
+  );
 }
 
 function FormField({ label, req, error, children }) {
@@ -133,7 +198,7 @@ function FormField({ label, req, error, children }) {
         {label} {req ? <span className="text-[#c53030]">*</span> : null}
       </label>
       {children}
-      {error ? <span className="text-[10px] text-[#c53030]">Wajib diisi</span> : null}
+      {error ? <span className="text-[10px] text-[#c53030]">{typeof error === "string" ? error : "Wajib diisi"}</span> : null}
     </div>
   );
 }
@@ -141,6 +206,10 @@ function FormField({ label, req, error, children }) {
 function FormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOptions, isSaving }) {
   const [form, setForm] = useState(initialData || EMPTY_FORM);
   const [errors, setErrors] = useState({});
+  const alertMonths = useMemo(
+    () => calculateInspectionMonths(form.lastInspectionDate, form.nextInspectionDate),
+    [form.lastInspectionDate, form.nextInspectionDate]
+  );
 
   if (!isOpen) return null;
 
@@ -160,13 +229,16 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOptions,
     required.forEach((key) => {
       if (!String(form[key] || "").trim()) nextErrors[key] = true;
     });
+    if (form.lastInspectionDate && form.nextInspectionDate && alertMonths === "") {
+      nextErrors.nextInspectionDate = "Next inspection tidak boleh lebih awal";
+    }
 
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
 
-    onSave(form);
+    onSave({ ...form, alertDays: alertMonths });
   }
 
   return (
@@ -253,7 +325,7 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOptions,
             </select>
           </FormField>
 
-          <FormField label="Last Inspection Date" error={errors.lastInspectionDate}>
+          <FormField label="Start Inspection Date" error={errors.lastInspectionDate}>
             <input
               type="date"
               className={inputCls("lastInspectionDate")}
@@ -271,13 +343,12 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOptions,
             />
           </FormField>
 
-          <FormField label="Alert Days" error={errors.alertDays}>
+          <FormField label="Alert (Bulan)" error={errors.alertDays}>
             <input
-              type="number"
-              className={inputCls("alertDays")}
-              value={form.alertDays ?? ""}
-              onChange={set("alertDays")}
-              placeholder="Isi negatif jika sudah lewat"
+              className={`${inputCls("alertDays")} cursor-not-allowed bg-[#f8f9fb] text-[#536070]`}
+              value={alertMonths === "" ? "" : `${alertMonths} bulan`}
+              readOnly
+              placeholder="Otomatis dari tanggal inspeksi"
             />
           </FormField>
 
@@ -358,8 +429,8 @@ function DetailModal({ item, onClose }) {
               { label: "Kapal", value: item.kapal },
               { label: "Qty", value: item.qty || "-" },
               { label: "Bulan Expired", value: item.bulanExpired || "-" },
-              { label: "Alert Days", value: item.alertDays !== "" && item.alertDays !== null ? `${item.alertDays} hari` : "-" },
-              { label: "Last Inspection", value: fmtDate(item.lastInspectionDate) },
+              { label: "Alert (Bulan)", value: item.alertDays !== "" && item.alertDays !== null ? `${item.alertDays} bulan` : "-" },
+              { label: "Start Inspection", value: fmtDate(item.lastInspectionDate) },
               { label: "Next Inspection", value: fmtDate(item.nextInspectionDate) },
             ].map((row) => (
               <div key={row.label} className="rounded-[12px] border border-[#edf2f7] bg-[#fafbfd] px-4 py-3">
@@ -499,10 +570,10 @@ export default function LsaFfaPage() {
           ? true
           : alertFilter === "Lewat"
             ? isOverdue(item)
-            : alertFilter === "<=30 Hari"
-              ? item.alertDays !== "" && item.alertDays !== null && Number(item.alertDays) >= 0 && Number(item.alertDays) <= 30
-              : alertFilter === ">30 Hari"
-                ? item.alertDays !== "" && item.alertDays !== null && Number(item.alertDays) > 30
+            : alertFilter === "H-1 / Hari H"
+              ? needsAlert(item)
+              : alertFilter === ">H-1"
+                ? daysUntilNextInspection(item) !== null && daysUntilNextInspection(item) > 1
                 : true;
 
       return matchSearch && matchEquip && matchStatus && matchAlert;
@@ -512,7 +583,7 @@ export default function LsaFfaPage() {
   const alertItems = useMemo(() => {
     return [...data]
       .filter(needsAlert)
-      .sort((left, right) => Number(left.alertDays || 0) - Number(right.alertDays || 0))
+      .sort((left, right) => Number(daysUntilNextInspection(left) || 0) - Number(daysUntilNextInspection(right) || 0))
       .slice(0, 6);
   }, [data]);
 
@@ -620,7 +691,7 @@ export default function LsaFfaPage() {
           {[
             { label: "Total Kapal", value: stats.vessels, note: "unit dalam armada" },
             { label: "Total Equipment", value: stats.total, note: "record terdaftar" },
-            { label: "Alert <= 30 Hari", value: stats.needAlert, note: "segera dijadwalkan" },
+            { label: "Alert H-1/Hari H", value: stats.needAlert, note: "segera dijadwalkan" },
             { label: "Overdue / Expired", value: stats.expired, note: "perlu perhatian" },
           ].map((item) => (
             <div key={item.label} className="border-r border-white/10 px-5 py-4 last:border-r-0">
@@ -637,7 +708,7 @@ export default function LsaFfaPage() {
           { title: "Sudah Inspeksi", value: stats.sudah, note: "Status terverifikasi", icon: BadgeCheck, bg: "bg-[#edf9f1]", color: "text-[#15803d]" },
           { title: "Perlu Perhatian", value: stats.perluPerbaikan, note: "Belum / Perlu Perbaikan", icon: AlertTriangle, bg: "bg-[#fff7e8]", color: "text-[#b26a00]" },
           { title: "Overdue", value: stats.expired, note: "Next date sudah terlewati", icon: ShieldOff, bg: "bg-[#fff0f0]", color: "text-[#c53030]" },
-          { title: "Alert <= 30 Hari", value: stats.needAlert, note: "Segera jadwalkan inspeksi", icon: ArrowUpRight, bg: "bg-[#eff6ff]", color: "text-[#1d4ed8]" },
+          { title: "Alert H-1/Hari H", value: stats.needAlert, note: "Segera jadwalkan inspeksi", icon: ArrowUpRight, bg: "bg-[#eff6ff]", color: "text-[#1d4ed8]" },
         ].map((item) => {
           const Icon = item.icon;
           return (
@@ -720,7 +791,7 @@ export default function LsaFfaPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {["Semua", "Lewat", "<=30 Hari", ">30 Hari"].map((item) => (
+                  {["Semua", "Lewat", "H-1 / Hari H", ">H-1"].map((item) => (
                     <button
                       key={item}
                       type="button"
@@ -756,7 +827,7 @@ export default function LsaFfaPage() {
               <table className="w-full border-collapse text-[12px]">
                 <thead>
                   <tr className="sticky top-0 z-10 bg-[#f8fafb]">
-                    {["ID", "Kapal", "Equipment", "Qty", "Last Inspeksi", "Next Inspeksi", "Bulan Exp", "Alert", "Status", "Aksi"].map((header) => (
+                    {["ID", "Kapal", "Equipment", "Qty", "Start Inspeksi", "Next Inspeksi", "Bulan Exp", "Alert Bulan", "Status", "Aksi"].map((header) => (
                       <th key={header} className="whitespace-nowrap border-b border-[#edf2f7] px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#8b96a1]">
                         {header}
                       </th>
@@ -799,7 +870,7 @@ export default function LsaFfaPage() {
                               <span className="text-[#c4cdd6]">-</span>
                             )}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-3"><AlertBadge days={item.alertDays} /></td>
+                          <td className="whitespace-nowrap px-3 py-3"><AlertBadge months={item.alertDays} /></td>
                           <td className="whitespace-nowrap px-3 py-3"><Pill item={item} /></td>
                           <td className="whitespace-nowrap px-3 py-3">
                             <div className="flex gap-1">
@@ -829,8 +900,8 @@ export default function LsaFfaPage() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-[15px] font-semibold text-[#1f2b38]">Alert &amp; Overdue</h2>
-                  <p className="mt-0.5 text-[11px] text-[#7c8793]">Equipment dengan masa inspeksi kritis</p>
+                  <h2 className="text-[15px] font-semibold text-[#1f2b38]">Alert H-1 &amp; Hari H</h2>
+                  <p className="mt-0.5 text-[11px] text-[#7c8793]">Equipment yang mendekati next inspection</p>
                 </div>
                 <span className="rounded-full bg-[#fff0f0] px-3 py-1 text-[11px] font-semibold text-[#c53030]">
                   {alertItems.length} item
@@ -855,7 +926,7 @@ export default function LsaFfaPage() {
                           <p className="mt-0.5 text-[11px] leading-snug text-[#536070]">{item.jenisEquipment}</p>
                           <p className="mt-1 text-[10px] text-[#7c8793]">Next: {fmtDate(item.nextInspectionDate)}</p>
                         </div>
-                        <AlertBadge days={item.alertDays} />
+                        <DueBadge item={item} />
                       </div>
                     );
                   })

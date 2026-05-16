@@ -510,7 +510,7 @@ function StfVirWorkbookPanel({ data }) {
         <div className="space-y-2">
           <div className="border border-[#9d7b00] bg-[#ffc928]">
             <div className="grid grid-cols-2 text-[10px] font-semibold uppercase text-[#2e2200]">
-              <span className="border-r border-b border-[#9d7b00] px-2 py-1">Target 2026</span>
+              <span className="border-r border-b border-[#9d7b00] px-2 py-1">Target {workbookData.target}</span>
               <span className="border-b border-[#9d7b00] px-2 py-1 text-center">Kapal</span>
               <span className="border-r border-[#9d7b00] px-2 py-1 text-center">{workbookData.target}</span>
               <span className="px-2 py-1 text-center">{workbookData.kapal}</span>
@@ -539,7 +539,7 @@ function QhseWorkbookSection({ data }) {
       <div>
         <h2 className="text-[17px] font-semibold text-[#1f2b38]">QHSE Workbook per Section</h2>
         <p className="mt-1 text-[12px] text-[#7c8793]">
-          Incident, Hazard, NCR, Security, dan STF &amp; VIR ditampilkan per section seperti workbook client.
+          Incident, Hazard, NCR, Security, dan STF &amp; VIR ditampilkan dari data Supabase terbaru.
         </p>
       </div>
       <div className="grid gap-4 xl:grid-cols-3">
@@ -557,6 +557,7 @@ function QhseWorkbookSection({ data }) {
 
 function ManhoursChart({ data }) {
   const chartData = data?.length ? data : [];
+  const hasData = chartData.length > 0;
   const maxHours = Math.max(1, ...chartData.flatMap((item) => [item.target, item.actual]));
 
   return (
@@ -565,7 +566,7 @@ function ManhoursChart({ data }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[17px] font-semibold text-[#1f2b38]">Grafik Manhours</h2>
-            <p className="mt-1 text-[12px] text-[#7c8793]">Bar comparison target vs actual per bulan</p>
+            <p className="mt-1 text-[12px] text-[#7c8793]">Bar comparison target vs actual dari monthly report</p>
           </div>
           <div className="rounded-full bg-[#eef4ff] px-3 py-1 text-[11px] font-semibold text-[#376ad6]">
             AMC
@@ -584,10 +585,11 @@ function ManhoursChart({ data }) {
         </div>
 
         <div className="mt-5 rounded-[18px] border border-[#edf1f4] bg-white p-3">
-          <svg viewBox="0 0 100 82" className="h-[240px] w-full">
-            {[18, 31, 44, 57, 70].map((y) => (
-              <line key={y} x1="8" x2="94" y1={y} y2={y} stroke="#edf1f4" strokeWidth="0.8" />
-            ))}
+          {hasData ? (
+            <svg viewBox="0 0 100 82" className="h-[240px] w-full">
+              {[18, 31, 44, 57, 70].map((y) => (
+                <line key={y} x1="8" x2="94" y1={y} y2={y} stroke="#edf1f4" strokeWidth="0.8" />
+              ))}
 
             {chartData.map((item, index) => {
               const baseX = 10 + index * (80 / Math.max(1, chartData.length));
@@ -600,7 +602,12 @@ function ManhoursChart({ data }) {
                 </g>
               );
             })}
-          </svg>
+            </svg>
+          ) : (
+            <div className="flex h-[240px] items-center justify-center text-[13px] font-medium text-[#8b96a1]">
+              Belum ada data manhours untuk periode ini.
+            </div>
+          )}
 
           <div className="grid grid-cols-4 px-2 text-center text-[11px] text-[#7a8591]">
             {chartData.map((item) => (
@@ -642,7 +649,7 @@ function ManpowerChart({ data }) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[17px] font-semibold text-[#1f2b38]">Grafik Manpower</h2>
-            <p className="mt-1 text-[12px] text-[#7c8793]">Line chart manpower aktif per bulan</p>
+            <p className="mt-1 text-[12px] text-[#7c8793]">Line chart manpower aktif dari monthly report</p>
           </div>
           <div className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#1f9b58]">
             Crew Trend
@@ -828,7 +835,7 @@ function LsaWorkbookSection({ data }) {
         <div>
           <h2 className="text-[17px] font-semibold text-[#1f2b38]">LSA &amp; FFA per Equipment</h2>
           <p className="mt-1 text-[12px] text-[#7c8793]">
-            Grafik workbook dipindah ke dashboard utama agar client langsung lihat ringkasan equipment dari homepage.
+            Grafik workbook LSA &amp; FFA mengikuti data equipment terbaru dari Supabase.
           </p>
         </div>
         <div className="rounded-full bg-[#edf9f1] px-3 py-1 text-[11px] font-semibold text-[#1f9b58]">
