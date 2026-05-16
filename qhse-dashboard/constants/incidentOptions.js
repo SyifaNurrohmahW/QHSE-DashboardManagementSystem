@@ -27,7 +27,7 @@ export const INCIDENT_LEVEL_OPTIONS = [
 export const INCIDENT_CATEGORY_OPTIONS = [
   "Tubrukan",
   "Kandas",
-  "Properti Dismiss",
+  "Property Damage/ Loss Property",
   "Injury Person",
   "Fatality",
 ];

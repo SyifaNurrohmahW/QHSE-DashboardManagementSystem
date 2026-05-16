@@ -71,7 +71,7 @@ const STATUS_STYLES = {
 const BREAKDOWN_COLORS = {
   Tubrukan: "#df5b5b",
   Kandas: "#4a87d9",
-  "Properti Dismiss": "#d89a2b",
+  "Property Damage/ Loss Property": "#d89a2b",
   "Injury Person": "#805ad5",
   Fatality: "#22a35e",
   Lainnya: "#73808d",
@@ -95,6 +95,29 @@ function fmtDate(value) {
 function toDateTimeInput(value) {
   if (!value) return "";
   return value.length >= 16 ? value.slice(0, 16) : value;
+}
+
+function calculateDowntimeDays(start, end) {
+  if (!start || !end) return "";
+
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "";
+
+  const diff = endDate.getTime() - startDate.getTime();
+  if (diff < 0) return "";
+
+  return Number((diff / (1000 * 60 * 60 * 24)).toFixed(2));
+}
+
+function formatDowntimeDays(value) {
+  if (value === "" || value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  return `${Number(value).toLocaleString("id-ID", { maximumFractionDigits: 2 })} hari`;
+}
+
+function getDowntimeDays(incident) {
+  const calculated = calculateDowntimeDays(incident?.start, incident?.end);
+  return calculated === "" ? incident?.duration ?? "" : calculated;
 }
 
 function genId(incidents) {
@@ -125,7 +148,7 @@ function FormField({ label, req, error, children }) {
         {label} {req ? <span className="text-[#c53030]">*</span> : null}
       </label>
       {children}
-      {error ? <span className="text-[10px] text-[#c53030]">Wajib diisi</span> : null}
+      {error ? <span className="text-[10px] text-[#c53030]">{typeof error === "string" ? error : "Wajib diisi"}</span> : null}
     </div>
   );
 }
@@ -203,6 +226,7 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSav
     end: toDateTimeInput(initialData?.end),
   }));
   const [errors, setErrors] = useState({});
+  const downtimeDays = useMemo(() => calculateDowntimeDays(form.start, form.end), [form.start, form.end]);
 
   const set = (key) => (event) => {
     setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -226,11 +250,14 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSav
     required.forEach((key) => {
       if (!form[key]?.toString().trim()) nextErrors[key] = true;
     });
+    if (form.start && form.end && downtimeDays === "") {
+      nextErrors.end = "Tanggal selesai tidak boleh lebih awal";
+    }
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
-    onSave(form);
+    onSave({ ...form, duration: downtimeDays });
   }
 
   if (!isOpen) return null;
@@ -317,8 +344,13 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSav
             <input type="datetime-local" className={inputCls("end")} value={form.end} onChange={set("end")} />
           </FormField>
 
-          <FormField label="Durasi Downtime (jam)">
-            <input type="number" min={0} className={inputCls("duration")} value={form.duration} onChange={set("duration")} placeholder="0" />
+          <FormField label="Durasi Downtime (hari)">
+            <input
+              className={`${inputCls("duration")} cursor-not-allowed bg-[#f8f9fb] text-[#5c6a77]`}
+              value={downtimeDays === "" ? "" : `${downtimeDays} hari`}
+              readOnly
+              placeholder="Otomatis dari tanggal"
+            />
           </FormField>
 
           <FormField label="Koordinat">
@@ -395,7 +427,7 @@ function FormModal({ isOpen, onClose, onSave, initialData, isEdit, nextId, isSav
               onChange={set("desc")}
               placeholder="Jelaskan kronologi dan detail insiden..."
             />
-            {errors.desc ? <span className="text-[10px] text-[#c53030]">Wajib diisi</span> : null}
+            {errors.desc ? <span className="text-[10px] text-[#c53030]">{typeof errors.desc === "string" ? errors.desc : "Wajib diisi"}</span> : null}
           </div>
         </div>
 
@@ -472,7 +504,7 @@ function DetailModal({ incident, onClose }) {
     { label: "Barge", value: incident.barge || "-" },
     { label: "Tanggal Mulai", value: fmtDate(incident.start) },
     { label: "Tanggal Selesai", value: fmtDate(incident.end) },
-    { label: "Durasi Downtime", value: incident.duration ? `${incident.duration} jam` : "-" },
+    { label: "Durasi Downtime", value: formatDowntimeDays(getDowntimeDays(incident)) },
     { label: "Koordinat", value: incident.coord || "-" },
     { label: "Kategori", value: incident.category || "-" },
     { label: "Lokasi", value: incident.location || "-" },
@@ -576,7 +608,7 @@ export default function IncidentPage() {
   const nearMiss = incidents.filter((item) => item.category?.toLowerCase().includes("near miss")).length;
   const openRatio = totalInsiden ? Math.round((aktifInsiden / totalInsiden) * 100) : 0;
   const completionRate = totalInsiden ? Math.round((selesaiInsiden / totalInsiden) * 100) : 0;
-  const totalDowntime = incidents.reduce((sum, item) => sum + Number(item.duration || 0), 0);
+  const totalDowntime = incidents.reduce((sum, item) => sum + Number(getDowntimeDays(item) || 0), 0);
 
   const mostCommonLocation = useMemo(() => {
     const counts = {};
@@ -720,7 +752,7 @@ export default function IncidentPage() {
             <p className="text-[12px] text-white/70">Total Downtime</p>
             <div className="mt-2 flex items-center gap-2">
               <Clock3 size={18} className="text-[#ffd9a0]" />
-              <span className="text-[20px] font-bold">{totalDowntime} Jam</span>
+              <span className="text-[20px] font-bold">{formatDowntimeDays(totalDowntime)}</span>
             </div>
             <p className="mt-1 text-[12px] text-white/75">Akumulasi durasi downtime insiden</p>
           </div>

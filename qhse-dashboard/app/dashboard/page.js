@@ -510,7 +510,7 @@ function StfVirWorkbookPanel({ data }) {
         <div className="space-y-2">
           <div className="border border-[#9d7b00] bg-[#ffc928]">
             <div className="grid grid-cols-2 text-[10px] font-semibold uppercase text-[#2e2200]">
-              <span className="border-r border-b border-[#9d7b00] px-2 py-1">Target {data.target}</span>
+              <span className="border-r border-b border-[#9d7b00] px-2 py-1">Target {workbookData.target}</span>
               <span className="border-b border-[#9d7b00] px-2 py-1 text-center">Kapal</span>
               <span className="border-r border-[#9d7b00] px-2 py-1 text-center">{workbookData.target}</span>
               <span className="px-2 py-1 text-center">{workbookData.kapal}</span>
@@ -557,6 +557,7 @@ function QhseWorkbookSection({ data }) {
 
 function ManhoursChart({ data }) {
   const chartData = data?.length ? data : [];
+  const hasData = chartData.length > 0;
   const maxHours = Math.max(1, ...chartData.flatMap((item) => [item.target, item.actual]));
 
   return (

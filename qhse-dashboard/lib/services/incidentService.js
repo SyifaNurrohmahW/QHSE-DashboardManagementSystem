@@ -21,7 +21,22 @@ function normalizeStatus(status) {
   return statusMap[normalized] || normalized || "open";
 }
 
+function calculateDowntimeDays(start, end) {
+  if (!start || !end) return null;
+
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return null;
+
+  const diff = endDate.getTime() - startDate.getTime();
+  if (diff < 0) return null;
+
+  return Number((diff / (1000 * 60 * 60 * 24)).toFixed(2));
+}
+
 function toDatabasePayload(payload) {
+  const calculatedDuration = calculateDowntimeDays(payload.start, payload.end);
+
   return {
     no_insiden: payload.id || payload.no_insiden,
     no_referensi_client: payload.ref || null,
@@ -35,10 +50,7 @@ function toDatabasePayload(payload) {
     tanggal_mulai: payload.start || null,
     tanggal_selesai: payload.end || null,
 
-    durasi_downtime:
-      payload.duration === "" || payload.duration === null || payload.duration === undefined
-        ? null
-        : Number(payload.duration),
+    durasi_downtime: calculatedDuration,
 
     koordinat: payload.coord || null,
     level: payload.level || null,

@@ -28,6 +28,7 @@ const EQUIPMENT_STATUS_LABELS = {
 };
 
 const JENIS_EQUIPMENT_VALUES = {
+  PMK: "PMK_II",
   "PMK II": "PMK_II",
   PMK_II: "PMK_II",
 
@@ -48,10 +49,13 @@ const JENIS_EQUIPMENT_VALUES = {
 
   "HRU EPIRB": "HRU_EPIRB",
   HRU_EPIRB: "HRU_EPIRB",
+
+  LIFERAFT: "LIFERAFT",
+  LIFEFRAFT: "LIFERAFT",
 };
 
 const JENIS_EQUIPMENT_LABELS = {
-  PMK_II: "PMK II",
+  PMK_II: "PMK",
   EPIRB_REG_TEST_BASARNAS: "EPIRB REG TEST BASARNAS",
   SERT_HRU_LIFERAFT: "SERT HRU LIFERAFT",
   Co2_System: "Co2 System",
@@ -59,6 +63,7 @@ const JENIS_EQUIPMENT_LABELS = {
   EEBD: "EEBD",
   Gas_Detector: "Gas Detector",
   HRU_EPIRB: "HRU EPIRB",
+  LIFERAFT: "LIFERAFT",
 };
 
 function normalizeEquipmentStatus(value) {
@@ -77,12 +82,45 @@ function normalizeJenisEquipment(value) {
   return JENIS_EQUIPMENT_VALUES[normalizedValue] || null;
 }
 
+function parseDateOnly(value) {
+  if (!value) return null;
+  const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function calculateInspectionMonths(start, next, options = {}) {
+  const startDate = parseDateOnly(start);
+  const nextDate = parseDateOnly(next);
+  if (!startDate || !nextDate) return null;
+  if (nextDate < startDate) {
+    if (options.throwOnInvalid) {
+      throw new Error("Next inspection tidak boleh lebih awal dari start inspection.");
+    }
+    return null;
+  }
+
+  const months =
+    (nextDate.getFullYear() - startDate.getFullYear()) * 12 +
+    (nextDate.getMonth() - startDate.getMonth()) -
+    (nextDate.getDate() < startDate.getDate() ? 1 : 0);
+
+  return Math.max(0, months);
+}
+
 function toDatabasePayload(payload) {
   const jenisEquipment = normalizeJenisEquipment(
     payload.jenisEquipment || payload.jenis_equipment
   );
 
   const status = normalizeEquipmentStatus(payload.status);
+  const lastInspectionDate =
+    payload.lastInspectionDate || payload.last_inspection_date || null;
+  const nextInspectionDate =
+    payload.nextInspectionDate || payload.next_inspection_date || null;
+  const alertMonths = calculateInspectionMonths(lastInspectionDate, nextInspectionDate, { throwOnInvalid: true });
 
   if (!payload.kapal_id) {
     throw new Error("Kapal wajib dipilih.");
@@ -101,18 +139,11 @@ function toDatabasePayload(payload) {
       payload.qty === undefined
         ? null
         : String(payload.qty).trim(),
-    last_inspection_date:
-      payload.lastInspectionDate || payload.last_inspection_date || null,
-    next_inspection_date:
-      payload.nextInspectionDate || payload.next_inspection_date || null,
+    last_inspection_date: lastInspectionDate,
+    next_inspection_date: nextInspectionDate,
     bulan_expired:
       payload.bulanExpired?.trim() || payload.bulan_expired?.trim() || null,
-    alert_days:
-      payload.alertDays === "" ||
-      payload.alertDays === null ||
-      payload.alertDays === undefined
-        ? null
-        : Number(payload.alertDays),
+    alert_days: alertMonths,
     status,
     keterangan: payload.keterangan?.trim() || null,
   };
@@ -134,7 +165,7 @@ function fromDatabaseRow(row) {
     lastInspectionDate: row.last_inspection_date || "",
     nextInspectionDate: row.next_inspection_date || "",
     bulanExpired: row.bulan_expired || "",
-    alertDays: row.alert_days ?? "",
+    alertDays: calculateInspectionMonths(row.last_inspection_date, row.next_inspection_date) ?? "",
 
     status: row.status || "",
     statusLabel: EQUIPMENT_STATUS_LABELS[row.status] || row.status || "",
@@ -287,7 +318,7 @@ export const LSA_FFA_STATUS_OPTIONS = [
 ];
 
 export const LSA_FFA_EQUIPMENT_OPTIONS = [
-  { label: "PMK II", value: "PMK_II" },
+  { label: "PMK", value: "PMK_II" },
   { label: "EPIRB REG TEST BASARNAS", value: "EPIRB_REG_TEST_BASARNAS" },
   { label: "SERT HRU LIFERAFT", value: "SERT_HRU_LIFERAFT" },
   { label: "Co2 System", value: "Co2_System" },
@@ -295,4 +326,5 @@ export const LSA_FFA_EQUIPMENT_OPTIONS = [
   { label: "EEBD", value: "EEBD" },
   { label: "Gas Detector", value: "Gas_Detector" },
   { label: "HRU EPIRB", value: "HRU_EPIRB" },
+  { label: "LIFERAFT", value: "LIFERAFT" },
 ];
