@@ -34,7 +34,9 @@ import { getKapalOptions } from "@/lib/services/kapalService";
 
 const MONTH_OPTIONS = MANHOURS_MONTH_OPTIONS.map((item) => item.label);
 const AREA_OPTIONS = MANHOURS_AREA_OPTIONS;
-const SHORE_CATEGORIES = MANPOWER_CATEGORY_OPTIONS.map((item) => item.label);
+const MANHOURS_DAYS = 31;
+const MANHOURS_ALLOWANCE_PERCENT = 5;
+const MANHOURS_MULTIPLIER = 1.05;
 
 const EMPTY_FLEET_FORM = {
   id: null,
@@ -45,7 +47,7 @@ const EMPTY_FLEET_FORM = {
   tipeKapal: "",
   avgNoOfCrews: "",
   standardCrew: "",
-  allowancePercent: 5,
+  allowancePercent: MANHOURS_ALLOWANCE_PERCENT,
   manhours: "",
   keterangan: "",
 };
@@ -63,20 +65,14 @@ function formatNumber(value) {
   return Number(value || 0).toLocaleString("id-ID");
 }
 
-function getDaysInMonth(monthName, year) {
-  const monthIndex = MONTH_OPTIONS.indexOf(monthName);
-  if (monthIndex < 0 || !year) return 0;
-  return new Date(Number(year), monthIndex + 1, 0).getDate();
-}
-
 function calculateFleetValues(form) {
   const crew = Number(form.avgNoOfCrews || form.standardCrew || 0);
-  const allowance = Number(form.allowancePercent || 0);
-  const days = getDaysInMonth(form.bulan, form.tahun);
-  const manhours = Math.round(crew * 24 * days * (1 + allowance / 100));
+  const days = MANHOURS_DAYS;
+  const manhours = Math.round(crew * 24 * days * MANHOURS_MULTIPLIER);
 
   return {
     days,
+    allowancePercent: MANHOURS_ALLOWANCE_PERCENT,
     manhours,
   };
 }
@@ -104,7 +100,7 @@ function toFleetForm(item) {
     tipeKapal: item.tipeKapalValue || item.tipeKapal || "",
     avgNoOfCrews: item.avgNoOfCrews ?? "",
     standardCrew: item.standardCrew ?? "",
-    allowancePercent: item.allowancePercent ?? 5,
+    allowancePercent: MANHOURS_ALLOWANCE_PERCENT,
     manhours: item.manhours ?? "",
     keterangan: item.keterangan || "",
   };
@@ -226,7 +222,7 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOpt
       tahun: Number(form.tahun),
       avgNoOfCrews: Number(form.avgNoOfCrews),
       standardCrew: form.standardCrew === "" ? null : Number(form.standardCrew),
-      allowancePercent: form.allowancePercent === "" ? null : Number(form.allowancePercent),
+      allowancePercent: MANHOURS_ALLOWANCE_PERCENT,
       daysInMonth: Number(preview.days),
       manhours: Number(form.manhours || preview.manhours),
     });
@@ -359,8 +355,8 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOpt
               type="number"
               min="0"
               className={inputClass("allowancePercent")}
-              value={form.allowancePercent}
-              onChange={(event) => updateField("allowancePercent", event.target.value)}
+              value={MANHOURS_ALLOWANCE_PERCENT}
+              readOnly
             />
           </FormField>
 
@@ -380,6 +376,10 @@ function FleetFormModal({ isOpen, onClose, onSave, initialData, isEdit, kapalOpt
               <div>
                 <p className="text-[#6a7b72]">Days</p>
                 <p className="mt-1 font-semibold text-[#153428]">{preview.days || 0}</p>
+              </div>
+              <div>
+                <p className="text-[#6a7b72]">Formula</p>
+                <p className="mt-1 font-semibold text-[#153428]">Avg x 24 x 31 x 1.05</p>
               </div>
               <div>
                 <p className="text-[#6a7b72]">Manhours</p>
@@ -943,7 +943,7 @@ export default function ManhoursPage() {
                 <div>
                   <h3 className="text-[15px] font-semibold text-[#243041]">Fleet Manhours</h3>
                   <p className="mt-1 text-[12px] text-[#7a8692]">
-                    Manhours dihitung otomatis berdasarkan tipe kapal dan jumlah hari dalam bulan.
+                    Manhours dihitung otomatis dengan rumus avg crew x 24 x 31 x 1.05.
                   </p>
                 </div>
                 <button
