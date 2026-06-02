@@ -5,6 +5,9 @@ const LAPORAN_TABLE = "tr_laporan";
 const MONTHLY_MANHOURS_VIEW = "vw_monthly_manhours";
 const MONTHLY_MANPOWER_VIEW = "vw_monthly_manpower_summary";
 const MONTHLY_REPORT_VIEW = "vw_monthly_report";
+const MANHOURS_TABLE = "tr_manhours";
+const MANHOURS_DAYS = 31;
+const MANHOURS_MULTIPLIER = 1.05;
 
 const MONTH_LABELS = {
   1: "Januari",
@@ -64,6 +67,67 @@ function toNumberOrZero(value) {
   }
 
   return numberValue;
+}
+
+function calculateManhours(avgNoOfCrews) {
+  return Math.round(toNumberOrZero(avgNoOfCrews) * 24 * MANHOURS_DAYS * MANHOURS_MULTIPLIER);
+}
+
+function monthKey(tahun, bulan) {
+  return `${tahun}-${bulan}`;
+}
+
+async function getCalculatedMonthlyManhoursMap() {
+  const { data, error } = await supabase
+    .from(MANHOURS_TABLE)
+    .select("tahun, bulan, avg_no_of_crews");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.reduce((summary, row) => {
+    const key = monthKey(row.tahun, row.bulan);
+    summary[key] = (summary[key] || 0) + calculateManhours(row.avg_no_of_crews);
+    return summary;
+  }, {});
+}
+
+function mergeCalculatedManhours(reportRows, calculatedManhoursMap) {
+  const reportByMonth = new Map(
+    reportRows.map((item) => [monthKey(item.tahun, item.bulanNumber), item])
+  );
+
+  Object.entries(calculatedManhoursMap).forEach(([key, totalManhours]) => {
+    const existing = reportByMonth.get(key);
+
+    if (existing) {
+      existing.totalManhours = totalManhours;
+      return;
+    }
+
+    const [tahun, bulan] = key.split("-").map(Number);
+    reportByMonth.set(key, {
+      tahun,
+      bulan: MONTH_LABELS[bulan] || bulan,
+      bulanNumber: bulan,
+      totalManhours,
+      totalInsiden: 0,
+      totalHazardReport: 0,
+      totalNcr: 0,
+      totalStfVir: 0,
+      totalSecurityRecord: 0,
+      totalManpowerFleet: 0,
+      totalManpowerShore: 0,
+      totalManpowerAll: 0,
+      raw: { tahun, bulan, total_manhours: totalManhours },
+    });
+  });
+
+  return [...reportByMonth.values()].sort((a, b) => {
+    if (a.tahun !== b.tahun) return b.tahun - a.tahun;
+    return b.bulanNumber - a.bulanNumber;
+  });
 }
 
 function fromMonthlyReportViewRow(row) {
@@ -273,34 +337,67 @@ export async function getMonthlyManpowerSummaryByPeriod(tahun, bulan) {
  * READ VIEW: vw_monthly_report
  */
 export async function getMonthlyReportView() {
-  const { data, error } = await supabase
+  const [{ data, error }, calculatedManhoursMap] = await Promise.all([
+    supabase
     .from(MONTHLY_REPORT_VIEW)
     .select("*")
     .order("tahun", { ascending: false })
-    .order("bulan", { ascending: false });
+      .order("bulan", { ascending: false }),
+    getCalculatedMonthlyManhoursMap(),
+  ]);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data.map(fromMonthlyReportViewRow);
+  return mergeCalculatedManhours(data.map(fromMonthlyReportViewRow), calculatedManhoursMap);
 }
 
 export async function getMonthlyReportByPeriod(tahun, bulan) {
   const bulanNumber = normalizeMonth(bulan);
 
-  const { data, error } = await supabase
-    .from(MONTHLY_REPORT_VIEW)
-    .select("*")
-    .eq("tahun", Number(tahun))
-    .eq("bulan", bulanNumber)
-    .maybeSingle();
+  const [{ data, error }, calculatedManhoursMap] = await Promise.all([
+    supabase
+      .from(MONTHLY_REPORT_VIEW)
+      .select("*")
+      .eq("tahun", Number(tahun))
+      .eq("bulan", bulanNumber)
+      .maybeSingle(),
+    getCalculatedMonthlyManhoursMap(),
+  ]);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data ? fromMonthlyReportViewRow(data) : null;
+  const totalManhours = calculatedManhoursMap[monthKey(Number(tahun), bulanNumber)] || 0;
+
+  if (data) {
+    return {
+      ...fromMonthlyReportViewRow(data),
+      totalManhours,
+    };
+  }
+
+  if (!totalManhours) {
+    return null;
+  }
+
+  return {
+    tahun: Number(tahun),
+    bulan: MONTH_LABELS[bulanNumber] || bulanNumber,
+    bulanNumber,
+    totalManhours,
+    totalInsiden: 0,
+    totalHazardReport: 0,
+    totalNcr: 0,
+    totalStfVir: 0,
+    totalSecurityRecord: 0,
+    totalManpowerFleet: 0,
+    totalManpowerShore: 0,
+    totalManpowerAll: 0,
+    raw: { tahun: Number(tahun), bulan: bulanNumber, total_manhours: totalManhours },
+  };
 }
 
 /**

@@ -23,7 +23,6 @@ import {
   updateManhours,
 } from "@/lib/services/manhoursService";
 import {
-  MANPOWER_CATEGORY_OPTIONS,
   MANPOWER_MONTH_OPTIONS,
   createManpower,
   deleteManpower,

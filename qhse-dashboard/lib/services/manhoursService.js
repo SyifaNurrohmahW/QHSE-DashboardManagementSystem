@@ -1,6 +1,9 @@
 import { supabase } from "@/lib/supabase";
 
 const TABLE_NAME = "tr_manhours";
+const MANHOURS_DAYS = 31;
+const MANHOURS_ALLOWANCE_PERCENT = 5;
+const MANHOURS_MULTIPLIER = 1.05;
 
 const MONTH_LABELS = {
   1: "Januari",
@@ -140,6 +143,10 @@ function toNumberOrZero(value) {
   return numberValue;
 }
 
+function calculateManhours(avgNoOfCrews) {
+  return Math.round(toNumberOrZero(avgNoOfCrews) * 24 * MANHOURS_DAYS * MANHOURS_MULTIPLIER);
+}
+
 function toDatabasePayload(payload) {
   const bulan = normalizeMonth(payload.bulan);
   const area = normalizeArea(payload.area);
@@ -190,6 +197,8 @@ function toDatabasePayload(payload) {
 }
 
 function fromDatabaseRow(row) {
+  const avgNoOfCrews = row.avg_no_of_crews ?? 0;
+
   return {
     id: row.id,
 
@@ -204,8 +213,8 @@ function fromDatabaseRow(row) {
     area: AREA_LABELS[row.area] || row.area || "",
     areaValue: row.area || "",
 
-    avgNoOfCrews: row.avg_no_of_crews ?? 0,
-    manhours: row.manhours ?? 0,
+    avgNoOfCrews,
+    manhours: calculateManhours(avgNoOfCrews),
 
     keterangan: row.keterangan || "",
 
@@ -213,8 +222,8 @@ function fromDatabaseRow(row) {
     tipeKapalValue: row.tipe_kapal || "",
 
     standardCrew: row.standard_crew ?? "",
-    allowancePercent: row.allowance_percent ?? "",
-    daysInMonth: row.days_in_month ?? "",
+    allowancePercent: MANHOURS_ALLOWANCE_PERCENT,
+    daysInMonth: MANHOURS_DAYS,
 
     createdBy: row.created_by,
     createdAt: row.created_at,
